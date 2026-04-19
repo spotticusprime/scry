@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Scry.Core</RootNamespace>
+  </PropertyGroup>
+
+</Project>
