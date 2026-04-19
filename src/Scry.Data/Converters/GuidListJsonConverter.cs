@@ -13,7 +13,7 @@ internal sealed class GuidListJsonConverter : ValueConverter<IReadOnlyList<Guid>
     {
     }
 
-    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = false };
+    private static readonly JsonSerializerOptions JsonOptions = new();
 }
 
 internal sealed class GuidListValueComparer : ValueComparer<IReadOnlyList<Guid>?>

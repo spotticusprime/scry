@@ -11,6 +11,7 @@ internal sealed class AssetConfiguration : IEntityTypeConfiguration<Asset>
     {
         builder.ToTable("Assets");
         builder.HasKey(a => a.Id);
+        builder.HasAlternateKey(a => new { a.WorkspaceId, a.Id });
 
         builder.Property(a => a.WorkspaceId).IsRequired();
         builder.Property(a => a.Name).IsRequired().HasMaxLength(500);

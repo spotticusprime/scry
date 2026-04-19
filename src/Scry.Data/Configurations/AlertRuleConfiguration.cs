@@ -10,12 +10,13 @@ internal sealed class AlertRuleConfiguration : IEntityTypeConfiguration<AlertRul
     {
         builder.ToTable("AlertRules");
         builder.HasKey(r => r.Id);
+        builder.HasAlternateKey(r => new { r.WorkspaceId, r.Id });
 
         builder.Property(r => r.WorkspaceId).IsRequired();
         builder.Property(r => r.Name).IsRequired().HasMaxLength(200);
         builder.Property(r => r.Expression).IsRequired();
         builder.Property(r => r.Severity).IsRequired().HasConversion<string>().HasMaxLength(16);
-        builder.Property(r => r.For).IsRequired();
+        builder.Property(r => r.For).IsRequired().HasColumnName("ForDuration");
         builder.Property(r => r.CreatedAt).IsRequired();
         builder.Property(r => r.UpdatedAt).IsRequired();
 

@@ -13,7 +13,7 @@ internal sealed class DictionaryJsonConverter : ValueConverter<Dictionary<string
     {
     }
 
-    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = false };
+    private static readonly JsonSerializerOptions JsonOptions = new();
 }
 
 internal sealed class DictionaryValueComparer : ValueComparer<Dictionary<string, string>>
@@ -21,7 +21,11 @@ internal sealed class DictionaryValueComparer : ValueComparer<Dictionary<string,
     public DictionaryValueComparer()
         : base(
             (a, b) => DictionariesEqual(a, b),
-            v => v.Aggregate(0, (hash, pair) => HashCode.Combine(hash, pair.Key.GetHashCode(StringComparison.Ordinal), pair.Value.GetHashCode(StringComparison.Ordinal))),
+            v => v.OrderBy(pair => pair.Key, StringComparer.Ordinal)
+                  .Aggregate(0, (hash, pair) => HashCode.Combine(
+                      hash,
+                      pair.Key.GetHashCode(StringComparison.Ordinal),
+                      pair.Value.GetHashCode(StringComparison.Ordinal))),
             v => new Dictionary<string, string>(v))
     {
     }

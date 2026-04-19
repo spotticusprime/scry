@@ -17,19 +17,26 @@ internal sealed class AssetRelationshipConfiguration : IEntityTypeConfiguration<
         builder.Property(r => r.Kind).IsRequired().HasConversion<string>().HasMaxLength(32);
         builder.Property(r => r.CreatedAt).IsRequired();
 
-        builder.HasOne<Asset>()
+        builder.HasOne<Workspace>()
             .WithMany()
-            .HasForeignKey(r => r.SourceAssetId)
+            .HasForeignKey(r => r.WorkspaceId)
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasOne<Asset>()
             .WithMany()
-            .HasForeignKey(r => r.TargetAssetId)
+            .HasPrincipalKey(a => new { a.WorkspaceId, a.Id })
+            .HasForeignKey(r => new { r.WorkspaceId, r.SourceAssetId })
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasOne<Asset>()
+            .WithMany()
+            .HasPrincipalKey(a => new { a.WorkspaceId, a.Id })
+            .HasForeignKey(r => new { r.WorkspaceId, r.TargetAssetId })
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(r => r.WorkspaceId);
-        builder.HasIndex(r => new { r.SourceAssetId, r.Kind });
-        builder.HasIndex(r => new { r.TargetAssetId, r.Kind });
-        builder.HasIndex(r => new { r.SourceAssetId, r.TargetAssetId, r.Kind }).IsUnique();
+        builder.HasIndex(r => new { r.WorkspaceId, r.SourceAssetId, r.Kind });
+        builder.HasIndex(r => new { r.WorkspaceId, r.TargetAssetId, r.Kind });
+        builder.HasIndex(r => new { r.WorkspaceId, r.SourceAssetId, r.TargetAssetId, r.Kind }).IsUnique();
     }
 }

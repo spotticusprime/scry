@@ -12,30 +12,6 @@ namespace Scry.Data.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
-                name: "Jobs",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    WorkspaceId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    Kind = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
-                    Payload = table.Column<string>(type: "TEXT", nullable: false),
-                    Status = table.Column<string>(type: "TEXT", maxLength: 16, nullable: false),
-                    ClaimedBy = table.Column<string>(type: "TEXT", maxLength: 200, nullable: true),
-                    ClaimedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
-                    LeaseExpiresAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
-                    RunAfter = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
-                    AttemptCount = table.Column<int>(type: "INTEGER", nullable: false),
-                    MaxAttempts = table.Column<int>(type: "INTEGER", nullable: false),
-                    LastError = table.Column<string>(type: "TEXT", maxLength: 4000, nullable: true),
-                    CreatedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
-                    UpdatedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Jobs", x => x.Id);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "Workspaces",
                 columns: table => new
                 {
@@ -60,13 +36,14 @@ namespace Scry.Data.Migrations
                     Expression = table.Column<string>(type: "TEXT", nullable: false),
                     Severity = table.Column<string>(type: "TEXT", maxLength: 16, nullable: false),
                     Enabled = table.Column<bool>(type: "INTEGER", nullable: false),
-                    For = table.Column<TimeSpan>(type: "TEXT", nullable: false),
+                    ForDuration = table.Column<TimeSpan>(type: "TEXT", nullable: false),
                     CreatedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
                     UpdatedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_AlertRules", x => x.Id);
+                    table.UniqueConstraint("AK_AlertRules_WorkspaceId_Id", x => new { x.WorkspaceId, x.Id });
                     table.ForeignKey(
                         name: "FK_AlertRules_Workspaces_WorkspaceId",
                         column: x => x.WorkspaceId,
@@ -92,8 +69,39 @@ namespace Scry.Data.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Assets", x => x.Id);
+                    table.UniqueConstraint("AK_Assets_WorkspaceId_Id", x => new { x.WorkspaceId, x.Id });
                     table.ForeignKey(
                         name: "FK_Assets_Workspaces_WorkspaceId",
+                        column: x => x.WorkspaceId,
+                        principalTable: "Workspaces",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Jobs",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    WorkspaceId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    Kind = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
+                    Payload = table.Column<string>(type: "TEXT", nullable: false),
+                    Status = table.Column<string>(type: "TEXT", maxLength: 16, nullable: false),
+                    ClaimedBy = table.Column<string>(type: "TEXT", maxLength: 200, nullable: true),
+                    ClaimedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
+                    LeaseExpiresAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
+                    RunAfter = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
+                    AttemptCount = table.Column<int>(type: "INTEGER", nullable: false),
+                    MaxAttempts = table.Column<int>(type: "INTEGER", nullable: false),
+                    LastError = table.Column<string>(type: "TEXT", maxLength: 4000, nullable: true),
+                    CreatedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
+                    UpdatedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Jobs", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Jobs_Workspaces_WorkspaceId",
                         column: x => x.WorkspaceId,
                         principalTable: "Workspaces",
                         principalColumn: "Id",
@@ -144,9 +152,15 @@ namespace Scry.Data.Migrations
                 {
                     table.PrimaryKey("PK_AlertEvents", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_AlertEvents_AlertRules_AlertRuleId",
-                        column: x => x.AlertRuleId,
+                        name: "FK_AlertEvents_AlertRules_WorkspaceId_AlertRuleId",
+                        columns: x => new { x.WorkspaceId, x.AlertRuleId },
                         principalTable: "AlertRules",
+                        principalColumns: new[] { "WorkspaceId", "Id" },
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_AlertEvents_Workspaces_WorkspaceId",
+                        column: x => x.WorkspaceId,
+                        principalTable: "Workspaces",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
@@ -166,17 +180,23 @@ namespace Scry.Data.Migrations
                 {
                     table.PrimaryKey("PK_AssetRelationships", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_AssetRelationships_Assets_SourceAssetId",
-                        column: x => x.SourceAssetId,
+                        name: "FK_AssetRelationships_Assets_WorkspaceId_SourceAssetId",
+                        columns: x => new { x.WorkspaceId, x.SourceAssetId },
                         principalTable: "Assets",
-                        principalColumn: "Id",
+                        principalColumns: new[] { "WorkspaceId", "Id" },
                         onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
-                        name: "FK_AssetRelationships_Assets_TargetAssetId",
-                        column: x => x.TargetAssetId,
+                        name: "FK_AssetRelationships_Assets_WorkspaceId_TargetAssetId",
+                        columns: x => new { x.WorkspaceId, x.TargetAssetId },
                         principalTable: "Assets",
-                        principalColumn: "Id",
+                        principalColumns: new[] { "WorkspaceId", "Id" },
                         onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "FK_AssetRelationships_Workspaces_WorkspaceId",
+                        column: x => x.WorkspaceId,
+                        principalTable: "Workspaces",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -197,11 +217,12 @@ namespace Scry.Data.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Probes", x => x.Id);
+                    table.UniqueConstraint("AK_Probes_WorkspaceId_Id", x => new { x.WorkspaceId, x.Id });
                     table.ForeignKey(
-                        name: "FK_Probes_Assets_AssetId",
-                        column: x => x.AssetId,
+                        name: "FK_Probes_Assets_WorkspaceId_AssetId",
+                        columns: x => new { x.WorkspaceId, x.AssetId },
                         principalTable: "Assets",
-                        principalColumn: "Id",
+                        principalColumns: new[] { "WorkspaceId", "Id" },
                         onDelete: ReferentialAction.SetNull);
                     table.ForeignKey(
                         name: "FK_Probes_Workspaces_WorkspaceId",
@@ -229,27 +250,33 @@ namespace Scry.Data.Migrations
                 {
                     table.PrimaryKey("PK_ProbeResults", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_ProbeResults_Probes_ProbeId",
-                        column: x => x.ProbeId,
+                        name: "FK_ProbeResults_Probes_WorkspaceId_ProbeId",
+                        columns: x => new { x.WorkspaceId, x.ProbeId },
                         principalTable: "Probes",
+                        principalColumns: new[] { "WorkspaceId", "Id" },
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_ProbeResults_Workspaces_WorkspaceId",
+                        column: x => x.WorkspaceId,
+                        principalTable: "Workspaces",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateIndex(
-                name: "IX_AlertEvents_AlertRuleId_Fingerprint_State",
-                table: "AlertEvents",
-                columns: new[] { "AlertRuleId", "Fingerprint", "State" });
-
-            migrationBuilder.CreateIndex(
-                name: "IX_AlertEvents_AlertRuleId_State",
-                table: "AlertEvents",
-                columns: new[] { "AlertRuleId", "State" });
-
-            migrationBuilder.CreateIndex(
                 name: "IX_AlertEvents_WorkspaceId",
                 table: "AlertEvents",
                 column: "WorkspaceId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_AlertEvents_WorkspaceId_AlertRuleId_Fingerprint_State",
+                table: "AlertEvents",
+                columns: new[] { "WorkspaceId", "AlertRuleId", "Fingerprint", "State" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_AlertEvents_WorkspaceId_AlertRuleId_State",
+                table: "AlertEvents",
+                columns: new[] { "WorkspaceId", "AlertRuleId", "State" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_AlertRules_WorkspaceId",
@@ -262,25 +289,25 @@ namespace Scry.Data.Migrations
                 columns: new[] { "WorkspaceId", "Enabled" });
 
             migrationBuilder.CreateIndex(
-                name: "IX_AssetRelationships_SourceAssetId_Kind",
-                table: "AssetRelationships",
-                columns: new[] { "SourceAssetId", "Kind" });
-
-            migrationBuilder.CreateIndex(
-                name: "IX_AssetRelationships_SourceAssetId_TargetAssetId_Kind",
-                table: "AssetRelationships",
-                columns: new[] { "SourceAssetId", "TargetAssetId", "Kind" },
-                unique: true);
-
-            migrationBuilder.CreateIndex(
-                name: "IX_AssetRelationships_TargetAssetId_Kind",
-                table: "AssetRelationships",
-                columns: new[] { "TargetAssetId", "Kind" });
-
-            migrationBuilder.CreateIndex(
                 name: "IX_AssetRelationships_WorkspaceId",
                 table: "AssetRelationships",
                 column: "WorkspaceId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_AssetRelationships_WorkspaceId_SourceAssetId_Kind",
+                table: "AssetRelationships",
+                columns: new[] { "WorkspaceId", "SourceAssetId", "Kind" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_AssetRelationships_WorkspaceId_SourceAssetId_TargetAssetId_Kind",
+                table: "AssetRelationships",
+                columns: new[] { "WorkspaceId", "SourceAssetId", "TargetAssetId", "Kind" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_AssetRelationships_WorkspaceId_TargetAssetId_Kind",
+                table: "AssetRelationships",
+                columns: new[] { "WorkspaceId", "TargetAssetId", "Kind" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_Assets_WorkspaceId",
@@ -300,19 +327,14 @@ namespace Scry.Data.Migrations
                 filter: "\"ExternalId\" IS NOT NULL");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Jobs_Status_LeaseExpiresAt",
+                name: "IX_Jobs_WorkspaceId_Status_LeaseExpiresAt",
                 table: "Jobs",
-                columns: new[] { "Status", "LeaseExpiresAt" });
+                columns: new[] { "WorkspaceId", "Status", "LeaseExpiresAt" });
 
             migrationBuilder.CreateIndex(
-                name: "IX_Jobs_Status_RunAfter",
+                name: "IX_Jobs_WorkspaceId_Status_RunAfter",
                 table: "Jobs",
-                columns: new[] { "Status", "RunAfter" });
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Jobs_WorkspaceId",
-                table: "Jobs",
-                column: "WorkspaceId");
+                columns: new[] { "WorkspaceId", "Status", "RunAfter" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_MaintenanceWindows_WorkspaceId",
@@ -325,24 +347,24 @@ namespace Scry.Data.Migrations
                 columns: new[] { "WorkspaceId", "StartsAt", "EndsAt" });
 
             migrationBuilder.CreateIndex(
-                name: "IX_ProbeResults_ProbeId_CompletedAt",
-                table: "ProbeResults",
-                columns: new[] { "ProbeId", "CompletedAt" });
-
-            migrationBuilder.CreateIndex(
                 name: "IX_ProbeResults_WorkspaceId_CompletedAt",
                 table: "ProbeResults",
                 columns: new[] { "WorkspaceId", "CompletedAt" });
 
             migrationBuilder.CreateIndex(
-                name: "IX_Probes_AssetId",
-                table: "Probes",
-                column: "AssetId");
+                name: "IX_ProbeResults_WorkspaceId_ProbeId_CompletedAt",
+                table: "ProbeResults",
+                columns: new[] { "WorkspaceId", "ProbeId", "CompletedAt" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_Probes_WorkspaceId",
                 table: "Probes",
                 column: "WorkspaceId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Probes_WorkspaceId_AssetId",
+                table: "Probes",
+                columns: new[] { "WorkspaceId", "AssetId" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_Probes_WorkspaceId_Enabled",

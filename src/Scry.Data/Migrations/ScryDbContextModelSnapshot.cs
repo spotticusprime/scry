@@ -15,7 +15,7 @@ namespace Scry.Data.Migrations
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "10.0.0");
+            modelBuilder.HasAnnotation("ProductVersion", "10.0.6");
 
             modelBuilder.Entity("Scry.Core.AlertEvent", b =>
                 {
@@ -68,9 +68,9 @@ namespace Scry.Data.Migrations
 
                     b.HasIndex("WorkspaceId");
 
-                    b.HasIndex("AlertRuleId", "State");
+                    b.HasIndex("WorkspaceId", "AlertRuleId", "State");
 
-                    b.HasIndex("AlertRuleId", "Fingerprint", "State");
+                    b.HasIndex("WorkspaceId", "AlertRuleId", "Fingerprint", "State");
 
                     b.ToTable("AlertEvents", (string)null);
                 });
@@ -92,7 +92,8 @@ namespace Scry.Data.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<TimeSpan>("For")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("ForDuration");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -196,11 +197,11 @@ namespace Scry.Data.Migrations
 
                     b.HasIndex("WorkspaceId");
 
-                    b.HasIndex("SourceAssetId", "Kind");
+                    b.HasIndex("WorkspaceId", "SourceAssetId", "Kind");
 
-                    b.HasIndex("TargetAssetId", "Kind");
+                    b.HasIndex("WorkspaceId", "TargetAssetId", "Kind");
 
-                    b.HasIndex("SourceAssetId", "TargetAssetId", "Kind")
+                    b.HasIndex("WorkspaceId", "SourceAssetId", "TargetAssetId", "Kind")
                         .IsUnique();
 
                     b.ToTable("AssetRelationships", (string)null);
@@ -260,11 +261,9 @@ namespace Scry.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("WorkspaceId");
+                    b.HasIndex("WorkspaceId", "Status", "LeaseExpiresAt");
 
-                    b.HasIndex("Status", "LeaseExpiresAt");
-
-                    b.HasIndex("Status", "RunAfter");
+                    b.HasIndex("WorkspaceId", "Status", "RunAfter");
 
                     b.ToTable("Jobs", (string)null);
                 });
@@ -344,9 +343,9 @@ namespace Scry.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AssetId");
-
                     b.HasIndex("WorkspaceId");
+
+                    b.HasIndex("WorkspaceId", "AssetId");
 
                     b.HasIndex("WorkspaceId", "Enabled");
 
@@ -389,9 +388,9 @@ namespace Scry.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ProbeId", "CompletedAt");
-
                     b.HasIndex("WorkspaceId", "CompletedAt");
+
+                    b.HasIndex("WorkspaceId", "ProbeId", "CompletedAt");
 
                     b.ToTable("ProbeResults", (string)null);
                 });
@@ -427,9 +426,16 @@ namespace Scry.Data.Migrations
 
             modelBuilder.Entity("Scry.Core.AlertEvent", b =>
                 {
+                    b.HasOne("Scry.Core.Workspace", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.HasOne("Scry.Core.AlertRule", null)
                         .WithMany()
-                        .HasForeignKey("AlertRuleId")
+                        .HasForeignKey("WorkspaceId", "AlertRuleId")
+                        .HasPrincipalKey("WorkspaceId", "Id")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
@@ -454,16 +460,33 @@ namespace Scry.Data.Migrations
 
             modelBuilder.Entity("Scry.Core.AssetRelationship", b =>
                 {
-                    b.HasOne("Scry.Core.Asset", null)
+                    b.HasOne("Scry.Core.Workspace", null)
                         .WithMany()
-                        .HasForeignKey("SourceAssetId")
+                        .HasForeignKey("WorkspaceId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.HasOne("Scry.Core.Asset", null)
                         .WithMany()
-                        .HasForeignKey("TargetAssetId")
+                        .HasForeignKey("WorkspaceId", "SourceAssetId")
+                        .HasPrincipalKey("WorkspaceId", "Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Scry.Core.Asset", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId", "TargetAssetId")
+                        .HasPrincipalKey("WorkspaceId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Scry.Core.Job", b =>
+                {
+                    b.HasOne("Scry.Core.Workspace", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
@@ -478,23 +501,31 @@ namespace Scry.Data.Migrations
 
             modelBuilder.Entity("Scry.Core.Probe", b =>
                 {
-                    b.HasOne("Scry.Core.Asset", null)
-                        .WithMany()
-                        .HasForeignKey("AssetId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("Scry.Core.Workspace", null)
                         .WithMany()
                         .HasForeignKey("WorkspaceId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("Scry.Core.Asset", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId", "AssetId")
+                        .HasPrincipalKey("WorkspaceId", "Id")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("Scry.Core.ProbeResult", b =>
                 {
+                    b.HasOne("Scry.Core.Workspace", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.HasOne("Scry.Core.Probe", null)
                         .WithMany()
-                        .HasForeignKey("ProbeId")
+                        .HasForeignKey("WorkspaceId", "ProbeId")
+                        .HasPrincipalKey("WorkspaceId", "Id")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

@@ -17,7 +17,7 @@ internal sealed class SqliteTestFixture : IDisposable
             .Options;
 
         using var context = CreateContext();
-        context.Database.EnsureCreated();
+        context.Database.Migrate();
     }
 
     public ScryDbContext CreateContext(Guid? workspaceId = null)

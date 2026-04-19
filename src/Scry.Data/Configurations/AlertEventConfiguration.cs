@@ -24,13 +24,19 @@ internal sealed class AlertEventConfiguration : IEntityTypeConfiguration<AlertEv
             .HasConversion(new DictionaryJsonConverter())
             .Metadata.SetValueComparer(new DictionaryValueComparer());
 
+        builder.HasOne<Workspace>()
+            .WithMany()
+            .HasForeignKey(e => e.WorkspaceId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         builder.HasOne<AlertRule>()
             .WithMany()
-            .HasForeignKey(e => e.AlertRuleId)
+            .HasPrincipalKey(r => new { r.WorkspaceId, r.Id })
+            .HasForeignKey(e => new { e.WorkspaceId, e.AlertRuleId })
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasIndex(e => e.WorkspaceId);
-        builder.HasIndex(e => new { e.AlertRuleId, e.State });
-        builder.HasIndex(e => new { e.AlertRuleId, e.Fingerprint, e.State });
+        builder.HasIndex(e => new { e.WorkspaceId, e.AlertRuleId, e.State });
+        builder.HasIndex(e => new { e.WorkspaceId, e.AlertRuleId, e.Fingerprint, e.State });
     }
 }

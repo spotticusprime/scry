@@ -10,6 +10,7 @@ internal sealed class ProbeConfiguration : IEntityTypeConfiguration<Probe>
     {
         builder.ToTable("Probes");
         builder.HasKey(p => p.Id);
+        builder.HasAlternateKey(p => new { p.WorkspaceId, p.Id });
 
         builder.Property(p => p.WorkspaceId).IsRequired();
         builder.Property(p => p.Name).IsRequired().HasMaxLength(200);
@@ -26,11 +27,12 @@ internal sealed class ProbeConfiguration : IEntityTypeConfiguration<Probe>
 
         builder.HasOne<Asset>()
             .WithMany()
-            .HasForeignKey(p => p.AssetId)
+            .HasPrincipalKey(a => new { a.WorkspaceId, a.Id })
+            .HasForeignKey(p => new { p.WorkspaceId, p.AssetId })
             .OnDelete(DeleteBehavior.SetNull);
 
         builder.HasIndex(p => p.WorkspaceId);
         builder.HasIndex(p => new { p.WorkspaceId, p.Enabled });
-        builder.HasIndex(p => p.AssetId);
+        builder.HasIndex(p => new { p.WorkspaceId, p.AssetId });
     }
 }

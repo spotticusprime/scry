@@ -24,12 +24,18 @@ internal sealed class ProbeResultConfiguration : IEntityTypeConfiguration<ProbeR
             .HasConversion(new DictionaryJsonConverter())
             .Metadata.SetValueComparer(new DictionaryValueComparer());
 
-        builder.HasOne<Probe>()
+        builder.HasOne<Workspace>()
             .WithMany()
-            .HasForeignKey(r => r.ProbeId)
+            .HasForeignKey(r => r.WorkspaceId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        builder.HasIndex(r => new { r.ProbeId, r.CompletedAt });
+        builder.HasOne<Probe>()
+            .WithMany()
+            .HasPrincipalKey(p => new { p.WorkspaceId, p.Id })
+            .HasForeignKey(r => new { r.WorkspaceId, r.ProbeId })
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasIndex(r => new { r.WorkspaceId, r.ProbeId, r.CompletedAt });
         builder.HasIndex(r => new { r.WorkspaceId, r.CompletedAt });
     }
 }

@@ -22,8 +22,12 @@ internal sealed class JobConfiguration : IEntityTypeConfiguration<Job>
         builder.Property(j => j.CreatedAt).IsRequired();
         builder.Property(j => j.UpdatedAt).IsRequired();
 
-        builder.HasIndex(j => j.WorkspaceId);
-        builder.HasIndex(j => new { j.Status, j.RunAfter });
-        builder.HasIndex(j => new { j.Status, j.LeaseExpiresAt });
+        builder.HasOne<Workspace>()
+            .WithMany()
+            .HasForeignKey(j => j.WorkspaceId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasIndex(j => new { j.WorkspaceId, j.Status, j.RunAfter });
+        builder.HasIndex(j => new { j.WorkspaceId, j.Status, j.LeaseExpiresAt });
     }
 }
