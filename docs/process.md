@@ -2,7 +2,7 @@
 
 ## Branches
 
-One job per branch. Names follow `area/short-slug`:
+One topic per branch. Names follow `area/short-slug`:
 
 - `bootstrap/` — repo setup, tooling
 - `core/` — domain model, interfaces
@@ -38,7 +38,7 @@ Every change lands via PR. The PR description has three sections:
 2. **Why** — reasoning and trade-offs.
 3. **Consulted during development** — anyone who gave input, with a one-liner on what they contributed. Includes external reviewers (human or AI).
 
-PRs need at least one external review before merge. Squash-merge by default; keep individual commits only when they tell a story worth preserving.
+PRs need at least one external approval before merge. Squash-merge by default; use rebase-and-merge when the branch's individual commits tell a story worth preserving in main's history.
 
 ## Review
 

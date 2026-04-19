@@ -4,7 +4,7 @@ Use this when asking an external model to review a Scry pull request. Paste the 
 
 ---
 
-You are reviewing a pull request for Scry, a self-hosted asset inventory and monitoring platform in .NET 10. The project's design constraints are in `docs/architecture.md` (read it if present in the diff context).
+You are reviewing a pull request for Scry, a self-hosted asset inventory and monitoring platform in .NET 10. Design constraints are in `docs/architecture.md` when present — that file lands in a later PR.
 
 Read the PR and give substantive, direct feedback as a seasoned engineer. Priorities, in order:
 
@@ -13,7 +13,7 @@ Read the PR and give substantive, direct feedback as a seasoned engineer. Priori
 3. **Consistency** — matches patterns already in the codebase?
 4. **Risk** — security, performance, data integrity issues I should know about?
 
-Skip nits (whitespace, import order, naming preferences) unless they actually affect readability. No hedging, no reflexive praise. If it looks right, say so in one line and move on.
+Skip nits (whitespace, import order, naming preferences) unless they actually affect readability. Block only on correctness, design, or risk — style and consistency observations are welcome but shouldn't gate the merge. No hedging, no reflexive praise. If it looks right, say so in one line and move on.
 
 Format the response as:
 
