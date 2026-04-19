@@ -1,8 +1,10 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Scry.Core/Scry.Core.csproj" />
+    <Project Path="src/Scry.Data/Scry.Data.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Scry.Core.Tests/Scry.Core.Tests.csproj" />
+    <Project Path="tests/Scry.Data.Tests/Scry.Data.Tests.csproj" />
   </Folder>
 </Solution>
