@@ -14,7 +14,7 @@ public class EntityDefaultsTests
     }
 
     [Fact]
-    public void Asset_initializes_with_empty_attributes_and_fresh_timestamps()
+    public void Asset_initializes_with_empty_attributes_and_equal_timestamps()
     {
         var before = DateTimeOffset.UtcNow;
         var asset = new Asset
@@ -32,16 +32,55 @@ public class EntityDefaultsTests
     }
 
     [Fact]
-    public void Job_defaults_to_pending_with_retry_budget()
+    public void Workspace_initializes_with_equal_timestamps()
     {
-        var job = new Job { Kind = "probe.run", Payload = "{}" };
+        var workspace = new Workspace { Name = "personal" };
 
+        Assert.Equal(workspace.CreatedAt, workspace.UpdatedAt);
+    }
+
+    [Fact]
+    public void Probe_initializes_with_equal_timestamps()
+    {
+        var probe = new Probe
+        {
+            WorkspaceId = Guid.NewGuid(),
+            Name = "cert-expiry-example",
+            Kind = "cert-expiry",
+            Definition = "host: example.com\nport: 443\n",
+        };
+
+        Assert.Equal(probe.CreatedAt, probe.UpdatedAt);
+    }
+
+    [Fact]
+    public void AlertRule_initializes_with_equal_timestamps()
+    {
+        var rule = new AlertRule
+        {
+            WorkspaceId = Guid.NewGuid(),
+            Name = "http-5xx-sustained",
+            Expression = "rate(http_5xx_total[5m]) > 0.1",
+        };
+
+        Assert.Equal(rule.CreatedAt, rule.UpdatedAt);
+    }
+
+    [Fact]
+    public void Job_requires_workspace_id_and_has_equal_timestamps()
+    {
+        var workspaceId = Guid.NewGuid();
+        var job = new Job { WorkspaceId = workspaceId, Kind = "probe.run", Payload = "{}" };
+
+        Assert.Equal(workspaceId, job.WorkspaceId);
         Assert.Equal(JobStatus.Pending, job.Status);
         Assert.Equal(5, job.MaxAttempts);
         Assert.Equal(0, job.AttemptCount);
         Assert.Null(job.ClaimedBy);
         Assert.Null(job.ClaimedAt);
         Assert.Null(job.LeaseExpiresAt);
+        Assert.Equal(job.CreatedAt, job.UpdatedAt);
+        Assert.Equal(job.CreatedAt, job.RunAfter);
     }
 
     [Fact]
@@ -61,16 +100,18 @@ public class EntityDefaultsTests
     }
 
     [Fact]
-    public void AlertEvent_starts_pending_with_null_lifecycle_timestamps()
+    public void AlertEvent_requires_severity_and_starts_pending()
     {
         var evt = new AlertEvent
         {
             WorkspaceId = Guid.NewGuid(),
             AlertRuleId = Guid.NewGuid(),
             Fingerprint = "rule=x:asset=y",
+            Severity = AlertSeverity.Critical,
         };
 
         Assert.Equal(AlertState.Pending, evt.State);
+        Assert.Equal(AlertSeverity.Critical, evt.Severity);
         Assert.Null(evt.AcknowledgedAt);
         Assert.Null(evt.ResolvedAt);
         Assert.Null(evt.LastNotifiedAt);

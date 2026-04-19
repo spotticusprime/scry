@@ -7,7 +7,7 @@ public class AlertEvent
     public required Guid AlertRuleId { get; init; }
     public required string Fingerprint { get; init; }
     public AlertState State { get; set; } = AlertState.Pending;
-    public AlertSeverity Severity { get; set; } = AlertSeverity.Warning;
+    public required AlertSeverity Severity { get; set; }
     public string? Summary { get; set; }
     public DateTimeOffset OpenedAt { get; init; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? AcknowledgedAt { get; set; }
