@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Scry.Data;
 
@@ -10,9 +11,11 @@ using Scry.Data;
 namespace Scry.Data.Migrations
 {
     [DbContext(typeof(ScryDbContext))]
-    partial class ScryDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260421155529_StoreDateTimeOffsetAsTicks")]
+    partial class StoreDateTimeOffsetAsTicks
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.6");
