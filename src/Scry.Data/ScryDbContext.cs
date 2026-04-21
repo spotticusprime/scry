@@ -1,6 +1,7 @@
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Scry.Core;
+using Scry.Data.Converters;
 
 namespace Scry.Data;
 
@@ -28,6 +29,9 @@ public class ScryDbContext : DbContext
     public DbSet<AlertEvent> AlertEvents => Set<AlertEvent>();
     public DbSet<MaintenanceWindow> MaintenanceWindows => Set<MaintenanceWindow>();
 
+    private static readonly DateTimeOffsetToTicksConverter DtoConverter = new();
+    private static readonly NullableDateTimeOffsetToTicksConverter NullableDtoConverter = new();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -35,6 +39,18 @@ public class ScryDbContext : DbContext
 
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
         {
+            foreach (var property in entityType.GetProperties())
+            {
+                if (property.ClrType == typeof(DateTimeOffset))
+                {
+                    property.SetValueConverter(DtoConverter);
+                }
+                else if (property.ClrType == typeof(DateTimeOffset?))
+                {
+                    property.SetValueConverter(NullableDtoConverter);
+                }
+            }
+
             if (entityType.ClrType == typeof(Workspace))
             {
                 continue;
