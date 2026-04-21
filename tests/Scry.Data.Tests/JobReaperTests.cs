@@ -19,7 +19,7 @@ public class JobReaperTests
     };
 
     [Fact]
-    public async Task ReclaimStaleLeases_ResetsStaledJobToPending()
+    public async Task ReclaimStaleLeases_ResetsStaleJobToPending()
     {
         using var fixture = new SqliteTestFixture();
         var wsId = Guid.NewGuid();

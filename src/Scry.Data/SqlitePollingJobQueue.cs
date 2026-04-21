@@ -55,59 +55,66 @@ internal sealed class SqlitePollingJobQueue : IJobQueue
     public async Task RenewLeaseAsync(Guid jobId, string workerId, TimeSpan leaseDuration, CancellationToken ct = default)
     {
         await using var ctx = await _factory.CreateDbContextAsync(ct);
-        var job = await ctx.Jobs
+        var now = DateTimeOffset.UtcNow;
+
+        // Single UPDATE with ownership predicate — re-checked atomically at write time so a
+        // post-reap call from the original worker is a guaranteed no-op rather than a race.
+        await ctx.Jobs
             .IgnoreQueryFilters() // no CurrentWorkspaceId on internal contexts; WHERE handles scoping
-            .SingleOrDefaultAsync(j => j.Id == jobId && j.Status == JobStatus.Claimed && j.ClaimedBy == workerId, ct);
-        if (job is null)
-        {
-            return;
-        }
-        job.LeaseExpiresAt = DateTimeOffset.UtcNow + leaseDuration;
-        await ctx.SaveChangesAsync(ct);
+            .Where(j => j.Id == jobId && j.Status == JobStatus.Claimed && j.ClaimedBy == workerId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(j => j.LeaseExpiresAt, now + leaseDuration)
+                .SetProperty(j => j.UpdatedAt, now), ct);
     }
 
     public async Task CompleteAsync(Guid jobId, string workerId, CancellationToken ct = default)
     {
         await using var ctx = await _factory.CreateDbContextAsync(ct);
-        var job = await ctx.Jobs
+        var now = DateTimeOffset.UtcNow;
+
+        // Single UPDATE with ownership predicate — re-checked atomically at write time.
+        await ctx.Jobs
             .IgnoreQueryFilters() // no CurrentWorkspaceId on internal contexts; WHERE handles scoping
-            .SingleOrDefaultAsync(j => j.Id == jobId && j.Status == JobStatus.Claimed && j.ClaimedBy == workerId, ct);
-        if (job is null)
-        {
-            return;
-        }
-        job.Status = JobStatus.Completed;
-        job.ClaimedBy = null;
-        job.ClaimedAt = null;
-        job.LeaseExpiresAt = null;
-        await ctx.SaveChangesAsync(ct);
+            .Where(j => j.Id == jobId && j.Status == JobStatus.Claimed && j.ClaimedBy == workerId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(j => j.Status, JobStatus.Completed)
+                .SetProperty(j => j.ClaimedBy, (string?)null)
+                .SetProperty(j => j.ClaimedAt, (DateTimeOffset?)null)
+                .SetProperty(j => j.LeaseExpiresAt, (DateTimeOffset?)null)
+                .SetProperty(j => j.UpdatedAt, now), ct);
     }
 
     public async Task FailAsync(Guid jobId, string workerId, string error, TimeSpan retryDelay, CancellationToken ct = default)
     {
         await using var ctx = await _factory.CreateDbContextAsync(ct);
         var now = DateTimeOffset.UtcNow;
-        var job = await ctx.Jobs
-            .IgnoreQueryFilters() // no CurrentWorkspaceId on internal contexts; WHERE handles scoping
-            .SingleOrDefaultAsync(j => j.Id == jobId && j.Status == JobStatus.Claimed && j.ClaimedBy == workerId, ct);
-        if (job is null)
-        {
-            return;
-        }
-        job.LastError = error;
-        job.ClaimedBy = null;
-        job.ClaimedAt = null;
-        job.LeaseExpiresAt = null;
+        var retryAfter = now + retryDelay;
 
-        if (job.AttemptCount >= job.MaxAttempts)
-        {
-            job.Status = JobStatus.Dead;
-        }
-        else
-        {
-            job.Status = JobStatus.Pending;
-            job.RunAfter = now + retryDelay;
-        }
-        await ctx.SaveChangesAsync(ct);
+        // Two conditional UPDATEs; exactly one matches (or neither if no longer owned by this
+        // worker). Ownership + attempt threshold checked atomically at write time on each.
+        await ctx.Jobs
+            .IgnoreQueryFilters() // no CurrentWorkspaceId on internal contexts; WHERE handles scoping
+            .Where(j => j.Id == jobId && j.Status == JobStatus.Claimed && j.ClaimedBy == workerId
+                        && j.AttemptCount >= j.MaxAttempts)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(j => j.Status, JobStatus.Dead)
+                .SetProperty(j => j.LastError, error)
+                .SetProperty(j => j.ClaimedBy, (string?)null)
+                .SetProperty(j => j.ClaimedAt, (DateTimeOffset?)null)
+                .SetProperty(j => j.LeaseExpiresAt, (DateTimeOffset?)null)
+                .SetProperty(j => j.UpdatedAt, now), ct);
+
+        await ctx.Jobs
+            .IgnoreQueryFilters() // no CurrentWorkspaceId on internal contexts; WHERE handles scoping
+            .Where(j => j.Id == jobId && j.Status == JobStatus.Claimed && j.ClaimedBy == workerId
+                        && j.AttemptCount < j.MaxAttempts)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(j => j.Status, JobStatus.Pending)
+                .SetProperty(j => j.RunAfter, retryAfter)
+                .SetProperty(j => j.LastError, error)
+                .SetProperty(j => j.ClaimedBy, (string?)null)
+                .SetProperty(j => j.ClaimedAt, (DateTimeOffset?)null)
+                .SetProperty(j => j.LeaseExpiresAt, (DateTimeOffset?)null)
+                .SetProperty(j => j.UpdatedAt, now), ct);
     }
 }

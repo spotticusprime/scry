@@ -10,6 +10,9 @@ internal sealed class FixtureDbContextFactory : IDbContextFactory<ScryDbContext>
 
     public ScryDbContext CreateDbContext() => _fixture.CreateContext();
 
-    public Task<ScryDbContext> CreateDbContextAsync(CancellationToken ct = default) =>
-        Task.FromResult(_fixture.CreateContext());
+    public Task<ScryDbContext> CreateDbContextAsync(CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        return Task.FromResult(_fixture.CreateContext());
+    }
 }
