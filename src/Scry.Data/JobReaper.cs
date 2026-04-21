@@ -30,9 +30,12 @@ internal sealed class JobReaper : BackgroundService
     {
         await using var ctx = await _factory.CreateDbContextAsync(ct);
         var now = DateTimeOffset.UtcNow;
+        // Cap at 50 per tick: a single SaveChangesAsync holds a write lock; loading all stale
+        // jobs at once would starve the claim path on busy instances.
         var stale = await ctx.Jobs
-            .IgnoreQueryFilters()
+            .IgnoreQueryFilters() // no CurrentWorkspaceId on internal contexts; reaper is cross-workspace by design
             .Where(j => j.Status == JobStatus.Claimed && j.LeaseExpiresAt < now)
+            .Take(50)
             .ToListAsync(ct);
 
         foreach (var job in stale)
@@ -55,5 +58,5 @@ internal sealed class JobReaper : BackgroundService
     }
 
     private static TimeSpan ExponentialBackoff(int attempt) =>
-        TimeSpan.FromSeconds(Math.Pow(2, attempt));
+        TimeSpan.FromSeconds(Math.Min(Math.Pow(2, attempt), 3600));
 }

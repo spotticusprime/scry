@@ -1,3 +1,4 @@
+using System.Data;
 using Microsoft.EntityFrameworkCore;
 using Scry.Core;
 
@@ -23,10 +24,14 @@ internal sealed class SqlitePollingJobQueue : IJobQueue
     {
         await using var ctx = await _factory.CreateDbContextAsync(ct);
         var now = DateTimeOffset.UtcNow;
-        await using var tx = await ctx.Database.BeginTransactionAsync(ct);
+
+        // IsolationLevel.Serializable → BEGIN IMMEDIATE in Microsoft.Data.Sqlite: the write
+        // lock is acquired at transaction start so two concurrent workers cannot read the same
+        // pending row before either commits. The default DEFERRED allows that race.
+        await using var tx = await ctx.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
 
         var job = await ctx.Jobs
-            .IgnoreQueryFilters()
+            .IgnoreQueryFilters() // no CurrentWorkspaceId on internal contexts; WHERE handles scoping
             .Where(j => j.WorkspaceId == workspaceId && j.Status == JobStatus.Pending && j.RunAfter <= now)
             .OrderBy(j => j.RunAfter)
             .FirstOrDefaultAsync(ct);
@@ -47,10 +52,30 @@ internal sealed class SqlitePollingJobQueue : IJobQueue
         return job;
     }
 
-    public async Task CompleteAsync(Guid jobId, CancellationToken ct = default)
+    public async Task RenewLeaseAsync(Guid jobId, string workerId, TimeSpan leaseDuration, CancellationToken ct = default)
     {
         await using var ctx = await _factory.CreateDbContextAsync(ct);
-        var job = await ctx.Jobs.IgnoreQueryFilters().SingleAsync(j => j.Id == jobId, ct);
+        var job = await ctx.Jobs
+            .IgnoreQueryFilters() // no CurrentWorkspaceId on internal contexts; WHERE handles scoping
+            .SingleOrDefaultAsync(j => j.Id == jobId && j.Status == JobStatus.Claimed && j.ClaimedBy == workerId, ct);
+        if (job is null)
+        {
+            return;
+        }
+        job.LeaseExpiresAt = DateTimeOffset.UtcNow + leaseDuration;
+        await ctx.SaveChangesAsync(ct);
+    }
+
+    public async Task CompleteAsync(Guid jobId, string workerId, CancellationToken ct = default)
+    {
+        await using var ctx = await _factory.CreateDbContextAsync(ct);
+        var job = await ctx.Jobs
+            .IgnoreQueryFilters() // no CurrentWorkspaceId on internal contexts; WHERE handles scoping
+            .SingleOrDefaultAsync(j => j.Id == jobId && j.Status == JobStatus.Claimed && j.ClaimedBy == workerId, ct);
+        if (job is null)
+        {
+            return;
+        }
         job.Status = JobStatus.Completed;
         job.ClaimedBy = null;
         job.ClaimedAt = null;
@@ -58,11 +83,17 @@ internal sealed class SqlitePollingJobQueue : IJobQueue
         await ctx.SaveChangesAsync(ct);
     }
 
-    public async Task FailAsync(Guid jobId, string error, TimeSpan retryDelay, CancellationToken ct = default)
+    public async Task FailAsync(Guid jobId, string workerId, string error, TimeSpan retryDelay, CancellationToken ct = default)
     {
         await using var ctx = await _factory.CreateDbContextAsync(ct);
         var now = DateTimeOffset.UtcNow;
-        var job = await ctx.Jobs.IgnoreQueryFilters().SingleAsync(j => j.Id == jobId, ct);
+        var job = await ctx.Jobs
+            .IgnoreQueryFilters() // no CurrentWorkspaceId on internal contexts; WHERE handles scoping
+            .SingleOrDefaultAsync(j => j.Id == jobId && j.Status == JobStatus.Claimed && j.ClaimedBy == workerId, ct);
+        if (job is null)
+        {
+            return;
+        }
         job.LastError = error;
         job.ClaimedBy = null;
         job.ClaimedAt = null;
