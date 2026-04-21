@@ -37,20 +37,29 @@ public class ScryDbContext : DbContext
         base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(Assembly.GetExecutingAssembly());
 
-        foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+        // SQLite has no native DateTimeOffset type and cannot run < / > on the ISO-8601
+        // text EF writes by default. Scoped to SQLite so a future Postgres provider gets
+        // native timestamptz and doesn't end up with bigint columns full of ticks.
+        if (Database.IsSqlite())
         {
-            foreach (var property in entityType.GetProperties())
+            foreach (var entityType in modelBuilder.Model.GetEntityTypes())
             {
-                if (property.ClrType == typeof(DateTimeOffset))
+                foreach (var property in entityType.GetProperties())
                 {
-                    property.SetValueConverter(DtoConverter);
-                }
-                else if (property.ClrType == typeof(DateTimeOffset?))
-                {
-                    property.SetValueConverter(NullableDtoConverter);
+                    if (property.ClrType == typeof(DateTimeOffset))
+                    {
+                        property.SetValueConverter(DtoConverter);
+                    }
+                    else if (property.ClrType == typeof(DateTimeOffset?))
+                    {
+                        property.SetValueConverter(NullableDtoConverter);
+                    }
                 }
             }
+        }
 
+        foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+        {
             if (entityType.ClrType == typeof(Workspace))
             {
                 continue;
