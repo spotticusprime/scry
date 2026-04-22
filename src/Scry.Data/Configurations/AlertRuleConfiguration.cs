@@ -17,6 +17,8 @@ internal sealed class AlertRuleConfiguration : IEntityTypeConfiguration<AlertRul
         builder.Property(r => r.Expression).IsRequired();
         builder.Property(r => r.Severity).IsRequired().HasConversion<string>().HasMaxLength(16);
         builder.Property(r => r.For).IsRequired().HasColumnName("ForDuration");
+        builder.Property(r => r.ProbeIdFilter);
+        builder.Property(r => r.NotifierConfig);
         builder.Property(r => r.CreatedAt).IsRequired();
         builder.Property(r => r.UpdatedAt).IsRequired();
 

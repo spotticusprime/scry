@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Scry.Core;
+using Scry.Probes.Alerts;
 using Scry.Probes.Executors;
 using Scry.Runner;
 
@@ -20,6 +21,10 @@ public static class ScryProbesExtensions
         services.AddScoped<IProbeExecutor, DnsProbeExecutor>();
         services.AddScoped<IProbeExecutor, TlsProbeExecutor>();
 
+        // Alert evaluation and notifiers.
+        services.AddScoped<AlertEvaluator>();
+        services.AddScoped<IAlertNotifier, WebhookNotifier>();
+
         // Handler is scoped so it can inject IDbContextFactory and other scoped deps.
         services.AddJobHandler<ProbeJobHandler>();
 
@@ -30,6 +35,10 @@ public static class ScryProbesExtensions
                 // No global timeout — each probe manages its own via a linked CancellationTokenSource.
                 client.Timeout = Timeout.InfiniteTimeSpan;
             })
+            .SetHandlerLifetime(TimeSpan.FromMinutes(5));
+
+        // Named client for webhook alert delivery.
+        services.AddHttpClient("scry.alerts")
             .SetHandlerLifetime(TimeSpan.FromMinutes(5));
 
         return services;

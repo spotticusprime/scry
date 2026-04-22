@@ -1,7 +1,9 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/Scry.Api/Scry.Api.csproj" />
     <Project Path="src/Scry.Core/Scry.Core.csproj" />
     <Project Path="src/Scry.Data/Scry.Data.csproj" />
+    <Project Path="src/Scry.Host/Scry.Host.csproj" />
     <Project Path="src/Scry.Probes/Scry.Probes.csproj" />
     <Project Path="src/Scry.Protos/Scry.Protos.csproj" />
     <Project Path="src/Scry.Runner/Scry.Runner.csproj" />
