@@ -33,7 +33,10 @@ public class DnsProbeExecutorTests
     public async Task Returns_Ok_When_Expected_Address_Is_Found()
     {
         var executor = new DnsProbeExecutor();
-        var probe = MakeProbe("host: localhost\nexpected_address: 127.0.0.1");
+        // Resolve first, then assert with an address we know is in the results.
+        var addresses = await System.Net.Dns.GetHostAddressesAsync("localhost");
+        var first = addresses[0].ToString();
+        var probe = MakeProbe($"host: localhost\nexpected_address: {first}");
 
         var result = await executor.ExecuteAsync(probe, CancellationToken.None);
 
