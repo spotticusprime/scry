@@ -133,7 +133,15 @@ internal sealed class JsonHttpProbeExecutor : IProbeExecutor
                 return false;
             }
         }
-        value = current.ValueKind == JsonValueKind.String ? current.GetString() : current.ToString();
+        // JsonElement.ToString() returns "True"/"False" for booleans — use raw JSON text instead.
+        value = current.ValueKind switch
+        {
+            JsonValueKind.String => current.GetString(),
+            JsonValueKind.True   => "true",
+            JsonValueKind.False  => "false",
+            JsonValueKind.Null   => null,
+            _                    => current.GetRawText(),
+        };
         return true;
     }
 }

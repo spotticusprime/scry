@@ -64,6 +64,29 @@ public class JsonHttpProbeExecutorTests
     }
 
     [Fact]
+    public async Task Returns_Ok_When_Json_Boolean_True_Matches()
+    {
+        // JsonElement.ToString() returns "True" for booleans — must map to "true" (JSON casing).
+        var (executor, _) = MakeExecutor(HttpStatusCode.OK, "{\"enabled\":true}");
+        var probe = MakeProbe("url: http://test.local\njson_path: enabled\nexpected_value: \"true\"");
+
+        var result = await executor.ExecuteAsync(probe, CancellationToken.None);
+
+        Assert.Equal(ProbeOutcome.Ok, result.Outcome);
+    }
+
+    [Fact]
+    public async Task Returns_Ok_When_Json_Boolean_False_Matches()
+    {
+        var (executor, _) = MakeExecutor(HttpStatusCode.OK, "{\"maintenance\":false}");
+        var probe = MakeProbe("url: http://test.local\njson_path: maintenance\nexpected_value: \"false\"");
+
+        var result = await executor.ExecuteAsync(probe, CancellationToken.None);
+
+        Assert.Equal(ProbeOutcome.Ok, result.Outcome);
+    }
+
+    [Fact]
     public async Task Returns_Crit_When_Json_Path_Value_Mismatches()
     {
         var (executor, _) = MakeExecutor(HttpStatusCode.OK, "{\"status\":\"degraded\"}");

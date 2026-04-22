@@ -31,14 +31,17 @@ internal sealed class TlsProbeExecutor : IProbeExecutor
             await ssl.AuthenticateAsClientAsync(new SslClientAuthenticationOptions
             {
                 TargetHost = config.Host,
-                // Accept any cert — we're reading it for expiry, not validating chain trust.
-                RemoteCertificateValidationCallback = (_, _, _, _) => true,
+                // When validate_remote_certificate is false (default), accept any cert so we can
+                // read expiry on self-signed / internal PKI certs. Set to true for strict PKI.
+                RemoteCertificateValidationCallback = config.ValidateRemoteCertificate
+                    ? null
+                    : (_, _, _, _) => true,
             }, probeCts.Token);
 
             sw.Stop();
 
             // SslStream.RemoteCertificate is always X509Certificate2 at runtime.
-            var cert = ssl.RemoteCertificate as X509Certificate2;
+            using var cert = ssl.RemoteCertificate as X509Certificate2;
             if (cert is null)
             {
                 return new ProbeResult

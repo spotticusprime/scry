@@ -13,12 +13,12 @@ public static class ScryProbesExtensions
     // Requires IJobQueue and AddScryRunner to already be registered.
     public static IServiceCollection AddScryProbes(this IServiceCollection services)
     {
-        // Executors are stateless singletons safe to share across job invocations.
-        services.AddSingleton<IProbeExecutor, HttpProbeExecutor>();
-        services.AddSingleton<IProbeExecutor, JsonHttpProbeExecutor>();
-        services.AddSingleton<IProbeExecutor, TcpProbeExecutor>();
-        services.AddSingleton<IProbeExecutor, DnsProbeExecutor>();
-        services.AddSingleton<IProbeExecutor, TlsProbeExecutor>();
+        // Executors are scoped (per-job) so they can safely inject scoped services in future iterations.
+        services.AddScoped<IProbeExecutor, HttpProbeExecutor>();
+        services.AddScoped<IProbeExecutor, JsonHttpProbeExecutor>();
+        services.AddScoped<IProbeExecutor, TcpProbeExecutor>();
+        services.AddScoped<IProbeExecutor, DnsProbeExecutor>();
+        services.AddScoped<IProbeExecutor, TlsProbeExecutor>();
 
         // Handler is scoped so it can inject IDbContextFactory and other scoped deps.
         services.AddJobHandler<ProbeJobHandler>();
