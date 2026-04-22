@@ -63,7 +63,7 @@ internal sealed class TcpProbeExecutor : IProbeExecutor
                 WorkspaceId = probe.WorkspaceId,
                 ProbeId = probe.Id,
                 Outcome = ProbeOutcome.Crit,
-                Message = $"Connection to {config.Host}:{config.Port} refused: {ex.Message}",
+                Message = $"Connection to {config.Host}:{config.Port} failed ({ex.SocketErrorCode}): {ex.Message}",
                 DurationMs = sw.ElapsedMilliseconds,
                 StartedAt = started,
                 CompletedAt = DateTimeOffset.UtcNow,

@@ -22,7 +22,11 @@ public static class ScryProbesExtensions
 
         // Named client used by HttpProbeExecutor. Timeout is set per-probe via CancellationToken;
         // the client itself has no global timeout to avoid capping per-probe configurations.
-        services.AddHttpClient("scry.probes")
+        services.AddHttpClient("scry.probes", client =>
+            {
+                // No global timeout — each probe manages its own via a linked CancellationTokenSource.
+                client.Timeout = Timeout.InfiniteTimeSpan;
+            })
             .SetHandlerLifetime(TimeSpan.FromMinutes(5));
 
         return services;

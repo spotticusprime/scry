@@ -99,6 +99,28 @@ public class HttpProbeExecutorTests
     }
 
     [Fact]
+    public async Task Returns_Crit_When_Expected_Status_Met_But_Body_Fails()
+    {
+        var (executor, _) = MakeExecutor(HttpStatusCode.OK, "error");
+        var probe = MakeProbe("url: http://test.local\nexpected_status: 200\nbody_contains: healthy");
+
+        var result = await executor.ExecuteAsync(probe, CancellationToken.None);
+
+        Assert.Equal(ProbeOutcome.Crit, result.Outcome);
+    }
+
+    [Fact]
+    public async Task Returns_Ok_When_Expected_Status_And_Body_Both_Match()
+    {
+        var (executor, _) = MakeExecutor(HttpStatusCode.OK, "status: healthy");
+        var probe = MakeProbe("url: http://test.local\nexpected_status: 200\nbody_contains: healthy");
+
+        var result = await executor.ExecuteAsync(probe, CancellationToken.None);
+
+        Assert.Equal(ProbeOutcome.Ok, result.Outcome);
+    }
+
+    [Fact]
     public async Task Returns_Error_On_Timeout()
     {
         var handler = new TimeoutHttpHandler();

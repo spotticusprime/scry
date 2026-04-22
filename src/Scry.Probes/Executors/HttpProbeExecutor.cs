@@ -35,6 +35,7 @@ internal sealed class HttpProbeExecutor : IProbeExecutor
             }
 
             using var response = await http.SendAsync(request, probeCts.Token);
+            // TODO: cap body reads to avoid buffering large responses; fine for Phase 1.
             var body = await response.Content.ReadAsStringAsync(probeCts.Token);
             sw.Stop();
 
@@ -77,13 +78,16 @@ internal sealed class HttpProbeExecutor : IProbeExecutor
     {
         if (config.ExpectedStatus.HasValue)
         {
-            return (int)response.StatusCode == config.ExpectedStatus
-                ? ProbeOutcome.Ok
-                : ProbeOutcome.Crit;
+            if ((int)response.StatusCode != config.ExpectedStatus)
+            {
+                return ProbeOutcome.Crit;
+            }
+            // Status matched — fall through to body check so both assertions are evaluated.
         }
-
-        if (!response.IsSuccessStatusCode)
+        else if (!response.IsSuccessStatusCode)
         {
+            // No expected status configured and response is not 2xx — body assertions against
+            // error pages don't make sense, so return immediately.
             return ProbeOutcome.Warn;
         }
 
