@@ -52,6 +52,37 @@ internal sealed class SqlitePollingJobQueue : IJobQueue
         return job;
     }
 
+    public async Task<Job?> ClaimAnyAsync(string workerId, TimeSpan leaseDuration, CancellationToken ct = default)
+    {
+        await using var ctx = await _factory.CreateDbContextAsync(ct);
+        var now = DateTimeOffset.UtcNow;
+
+        // Same BEGIN IMMEDIATE strategy as ClaimNextAsync; no workspace filter — dispatcher
+        // processes jobs for all workspaces.
+        await using var tx = await ctx.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+
+        var job = await ctx.Jobs
+            .IgnoreQueryFilters() // no CurrentWorkspaceId on internal contexts; WHERE handles scoping
+            .Where(j => j.Status == JobStatus.Pending && j.RunAfter <= now)
+            .OrderBy(j => j.RunAfter)
+            .FirstOrDefaultAsync(ct);
+
+        if (job is null)
+        {
+            await tx.RollbackAsync(ct);
+            return null;
+        }
+
+        job.Status = JobStatus.Claimed;
+        job.ClaimedBy = workerId;
+        job.ClaimedAt = now;
+        job.LeaseExpiresAt = now + leaseDuration;
+        job.AttemptCount++;
+        await ctx.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        return job;
+    }
+
     public async Task RenewLeaseAsync(Guid jobId, string workerId, TimeSpan leaseDuration, CancellationToken ct = default)
     {
         await using var ctx = await _factory.CreateDbContextAsync(ct);
