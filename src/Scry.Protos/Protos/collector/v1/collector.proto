@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package scry.collector.v1;
+
+option csharp_namespace = "Scry.Protos.Collector.V1";
+
+// CollectorService is the inbound surface for remote agents pushing probe results
+// back to the Scry server. Agents do not need direct database access.
+service CollectorService {
+  // Report a single probe result.
+  rpc ReportResult(ReportResultRequest) returns (ReportResultResponse);
+
+  // Report a batch of probe results in one call.
+  rpc ReportResultBatch(ReportResultBatchRequest) returns (ReportResultResponse);
+}
+
+// ProbeOutcome mirrors Scry.Core.ProbeOutcome.
+enum ProbeOutcome {
+  PROBE_OUTCOME_UNSPECIFIED = 0;
+  PROBE_OUTCOME_OK = 1;
+  PROBE_OUTCOME_WARN = 2;
+  PROBE_OUTCOME_CRIT = 3;
+  PROBE_OUTCOME_ERROR = 4;
+}
+
+message ProbeResultMessage {
+  string probe_id = 1;
+  string workspace_id = 2;
+  ProbeOutcome outcome = 3;
+  string message = 4;
+  int64 duration_ms = 5;
+  // UTC ticks (DateTimeOffset.UtcTicks) — matches the storage format used by Scry.Data.
+  int64 started_at_utc_ticks = 6;
+  int64 completed_at_utc_ticks = 7;
+  map<string, string> attributes = 8;
+}
+
+message ReportResultRequest {
+  ProbeResultMessage result = 1;
+}
+
+message ReportResultBatchRequest {
+  repeated ProbeResultMessage results = 1;
+}
+
+message ReportResultResponse {
+  bool accepted = 1;
+  string error = 2;
+}

@@ -2,9 +2,12 @@
   <Folder Name="/src/">
     <Project Path="src/Scry.Core/Scry.Core.csproj" />
     <Project Path="src/Scry.Data/Scry.Data.csproj" />
+    <Project Path="src/Scry.Protos/Scry.Protos.csproj" />
+    <Project Path="src/Scry.Runner/Scry.Runner.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Scry.Core.Tests/Scry.Core.Tests.csproj" />
     <Project Path="tests/Scry.Data.Tests/Scry.Data.Tests.csproj" />
+    <Project Path="tests/Scry.Runner.Tests/Scry.Runner.Tests.csproj" />
   </Folder>
 </Solution>
