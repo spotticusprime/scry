@@ -29,5 +29,8 @@ internal sealed class JobConfiguration : IEntityTypeConfiguration<Job>
 
         builder.HasIndex(j => new { j.WorkspaceId, j.Status, j.RunAfter });
         builder.HasIndex(j => new { j.WorkspaceId, j.Status, j.LeaseExpiresAt });
+        // Cross-workspace claim (ClaimAnyAsync) queries without a WorkspaceId prefix;
+        // the workspace-scoped indexes above cannot serve it efficiently.
+        builder.HasIndex(j => new { j.Status, j.RunAfter });
     }
 }

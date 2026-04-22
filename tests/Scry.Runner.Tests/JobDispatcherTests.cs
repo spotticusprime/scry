@@ -15,7 +15,7 @@ public class JobDispatcherTests
     };
 
     private static JobDispatcher MakeDispatcher(FakeJobQueue queue, params IJobHandler[] handlers) =>
-        new(queue, handlers, "worker-test", TimeSpan.FromMinutes(1), TimeSpan.Zero,
+        new(queue, new FakeScopeFactory(handlers), "worker-test", TimeSpan.FromMinutes(1), TimeSpan.Zero,
             NullLogger<JobDispatcher>.Instance);
 
     [Fact]
@@ -29,7 +29,9 @@ public class JobDispatcherTests
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         _ = dispatcher.StartAsync(cts.Token);
 
-        await handler.WaitForOneAsync(cts.Token);
+        // Wait on queue completion, not handler start, to avoid the race between
+        // HandleAsync returning and CompleteAsync being called.
+        await Retry.UntilAsync(() => queue.Completed.Count > 0, cts.Token);
         await cts.CancelAsync();
 
         Assert.Single(handler.Handled);
@@ -49,7 +51,7 @@ public class JobDispatcherTests
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         _ = dispatcher.StartAsync(cts.Token);
 
-        await handler.WaitForOneAsync(cts.Token);
+        await Retry.UntilAsync(() => queue.Completed.Count > 0, cts.Token);
         await cts.CancelAsync();
 
         Assert.Equal(job.Id, queue.Completed[0].JobId);
@@ -115,22 +117,30 @@ public class JobDispatcherTests
         Assert.Single(pongHandler.Handled);
     }
 
+    [Fact]
+    public async Task StartAsync_Throws_On_Duplicate_Handler_Kinds()
+    {
+        var queue = new FakeJobQueue();
+        var dispatcher = MakeDispatcher(queue,
+            new RecordingHandler("ping"),
+            new RecordingHandler("ping")); // duplicate
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            dispatcher.StartAsync(CancellationToken.None));
+    }
+
     // Helpers
 
     private sealed class RecordingHandler(string kind) : IJobHandler
     {
-        private readonly TaskCompletionSource _firstHandled = new();
         public string Kind => kind;
         public List<Job> Handled { get; } = [];
 
         public Task HandleAsync(Job job, CancellationToken ct)
         {
             Handled.Add(job);
-            _firstHandled.TrySetResult();
             return Task.CompletedTask;
         }
-
-        public Task WaitForOneAsync(CancellationToken ct) => _firstHandled.Task.WaitAsync(ct);
     }
 
     private sealed class ThrowingHandler(string kind) : IJobHandler
@@ -147,6 +157,11 @@ public class JobDispatcherTests
             while (!condition() && !ct.IsCancellationRequested)
             {
                 await Task.Delay(10, ct).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+            }
+
+            if (!condition())
+            {
+                throw new TimeoutException("Test condition was not met before the cancellation token fired.");
             }
         }
     }

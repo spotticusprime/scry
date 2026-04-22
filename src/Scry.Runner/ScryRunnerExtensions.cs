@@ -16,19 +16,21 @@ public static class ScryRunnerExtensions
         services.AddHostedService(sp =>
         {
             var queue = sp.GetRequiredService<IJobQueue>();
-            var handlers = sp.GetServices<IJobHandler>();
+            var scopeFactory = sp.GetRequiredService<IServiceScopeFactory>();
             var logger = sp.GetRequiredService<ILogger<JobDispatcher>>();
-            return new JobDispatcher(queue, handlers, options.WorkerId, options.LeaseDuration,
+            return new JobDispatcher(queue, scopeFactory, options.WorkerId, options.LeaseDuration,
                 options.PollInterval, logger);
         });
 
         return services;
     }
 
+    // Registers the handler as scoped so implementations can inject scoped services
+    // such as IDbContextFactory<ScryDbContext>.
     public static IServiceCollection AddJobHandler<THandler>(this IServiceCollection services)
         where THandler : class, IJobHandler
     {
-        services.AddSingleton<IJobHandler, THandler>();
+        services.AddScoped<IJobHandler, THandler>();
         return services;
     }
 }
