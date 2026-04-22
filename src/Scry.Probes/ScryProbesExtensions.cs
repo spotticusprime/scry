@@ -15,7 +15,10 @@ public static class ScryProbesExtensions
     {
         // Executors are stateless singletons safe to share across job invocations.
         services.AddSingleton<IProbeExecutor, HttpProbeExecutor>();
+        services.AddSingleton<IProbeExecutor, JsonHttpProbeExecutor>();
         services.AddSingleton<IProbeExecutor, TcpProbeExecutor>();
+        services.AddSingleton<IProbeExecutor, DnsProbeExecutor>();
+        services.AddSingleton<IProbeExecutor, TlsProbeExecutor>();
 
         // Handler is scoped so it can inject IDbContextFactory and other scoped deps.
         services.AddJobHandler<ProbeJobHandler>();
