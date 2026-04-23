@@ -30,6 +30,7 @@ public static class ScryApiExtensions
         api.MapProbeEndpoints();
         api.MapResultEndpoints();
         api.MapAlertRuleEndpoints();
+        api.MapTopologyEndpoints();
         return app;
     }
 }

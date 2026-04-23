@@ -75,6 +75,7 @@
                     <th>Probe</th>
                     <th>Kind</th>
                     <th>Status</th>
+                    <th>24h trend</th>
                     <th>Message</th>
                     <th>Last run</th>
                     <th>Duration</th>
@@ -91,6 +92,19 @@
                         </td>
                         <td><span class="text-muted font-mono">@row.Kind</span></td>
                         <td><span class="badge @BadgeClass(row.Outcome)">@row.Outcome</span></td>
+                        <td style="width:100px;padding:4px 8px;">
+                            @if (sparklines.TryGetValue(row.ProbeId, out var pts) && pts.Count > 0)
+                            {
+                                <ApexChart TItem="SparkPoint" Options="sparkOptions" Height="40" Width="100">
+                                    <ApexPointSeries TItem="SparkPoint"
+                                        Items="pts"
+                                        SeriesType="SeriesType.Area"
+                                        XValue="p => p.X"
+                                        YValue="p => p.Y"
+                                        Color="@SparkColor(row.Outcome)" />
+                                </ApexChart>
+                            }
+                        </td>
                         <td class="text-muted" style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
                             @row.Message
                         </td>
@@ -110,12 +124,26 @@
     private List<ProbeRow> rows = [];
     private int okCount, warnCount, critCount, errorCount, firingAlerts;
     private DateTimeOffset refreshed = DateTimeOffset.UtcNow;
+    private Dictionary<Guid, List<SparkPoint>> sparklines = new();
+
+    private static readonly ApexChartOptions<SparkPoint> sparkOptions = new()
+    {
+        Chart = new Chart
+        {
+            Sparkline = new ChartSparkline { Enabled = true },
+            Background = "transparent",
+            Toolbar = new Toolbar { Show = false },
+            Animations = new Animations { Enabled = false },
+        },
+        Tooltip = new Tooltip { Enabled = false },
+        Grid = new Grid { Show = false },
+    };
 
     protected override async Task OnInitializedAsync()
     {
         await using var ctx = await DbFactory.CreateDbContextAsync();
         workspace = await ctx.Workspaces.FindAsync(WorkspaceId);
-        if (workspace is null) return;
+        if (workspace is null) { return; }
 
         ctx.CurrentWorkspaceId = WorkspaceId;
 
@@ -157,6 +185,61 @@
             .CountAsync();
 
         refreshed = DateTimeOffset.UtcNow;
+
+        // Load sparklines in parallel for all probes.
+        var sparkTasks = rows.Select(r => LoadSparkAsync(r.ProbeId)).ToList();
+        await Task.WhenAll(sparkTasks);
+    }
+
+    private async Task LoadSparkAsync(Guid probeId)
+    {
+        try
+        {
+            await using var ctx = await DbFactory.CreateDbContextAsync();
+            ctx.CurrentWorkspaceId = WorkspaceId;
+
+            var from = DateTimeOffset.UtcNow.AddHours(-24);
+            const int bucketMinutes = 60;
+
+            var sql = $$"""
+                SELECT
+                    date_trunc('minute', "CompletedAt" AT TIME ZONE 'UTC') -
+                        (EXTRACT(MINUTE FROM "CompletedAt" AT TIME ZONE 'UTC')::int % {{bucketMinutes}}) * interval '1 minute'
+                        AS "Bucket",
+                    MODE() WITHIN GROUP (ORDER BY "Outcome") AS "Outcome",
+                    AVG("DurationMs") AS "AvgDurationMs",
+                    COUNT(*) AS "Count"
+                FROM "ProbeResults"
+                WHERE "ProbeId" = {0}
+                  AND "WorkspaceId" = {1}
+                  AND "CompletedAt" >= {2}
+                GROUP BY "Bucket"
+                ORDER BY "Bucket"
+                """;
+
+            var rows = await ctx.Database
+                .SqlQueryRaw<TsRow>(sql, probeId, WorkspaceId, from)
+                .ToListAsync();
+
+            if (rows.Count > 0)
+            {
+                sparklines[probeId] = rows
+                    .Select(r => new SparkPoint(r.Bucket.ToUnixTimeMilliseconds(), OutcomeRank(r.Outcome)))
+                    .ToList();
+            }
+        }
+        catch
+        {
+            // sparkline failure is non-critical
+        }
+    }
+
+    private sealed class TsRow
+    {
+        public DateTimeOffset Bucket { get; set; }
+        public string Outcome { get; set; } = "";
+        public double AvgDurationMs { get; set; }
+        public long Count { get; set; }
     }
 
     private static string DotClass(ProbeOutcome o) => o switch
@@ -187,8 +270,28 @@
              : t.ToString("MMM d");
     }
 
+    private static int OutcomeRank(string outcome) => outcome switch
+    {
+        "Ok" => 1,
+        "Warn" => 2,
+        "Error" => 3,
+        "Crit" => 4,
+        _ => 0,
+    };
+
+    private static string SparkColor(ProbeOutcome o) => o switch
+    {
+        ProbeOutcome.Ok => "#198754",
+        ProbeOutcome.Warn => "#ffc107",
+        ProbeOutcome.Crit => "#dc3545",
+        ProbeOutcome.Error => "#dc3545",
+        _ => "#6c757d",
+    };
+
     private sealed record ProbeRow(
         Guid ProbeId, string Name, string Kind,
         ProbeOutcome Outcome, string Message,
         DateTimeOffset CompletedAt, long DurationMs);
+
+    private sealed record SparkPoint(long X, int Y);
 }

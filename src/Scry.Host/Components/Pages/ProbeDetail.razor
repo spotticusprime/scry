@@ -144,6 +144,31 @@
     </div>
 }
 
+@if (timeseriesPoints.Count > 0)
+{
+    <div class="scry-card mb-3">
+        <div class="scry-card-header"><i class="bi bi-graph-up me-2"></i>24h trend</div>
+        <div class="p-3">
+            <ApexChart TItem="TimeseriesPoint" Title="" Height="220" Options="chartOptions">
+                <ApexPointSeries TItem="TimeseriesPoint"
+                    Items="timeseriesPoints"
+                    Name="Duration (ms)"
+                    SeriesType="SeriesType.Line"
+                    XValue="p => p.Bucket.ToUnixTimeMilliseconds()"
+                    YValue="p => (decimal)p.AvgDurationMs"
+                    Color="#0d6efd" />
+                <ApexPointSeries TItem="TimeseriesPoint"
+                    Items="timeseriesPoints"
+                    Name="Outcome"
+                    SeriesType="SeriesType.Area"
+                    XValue="p => p.Bucket.ToUnixTimeMilliseconds()"
+                    YValue="p => (decimal)OutcomeRank(p.Outcome)"
+                    Color="#198754" />
+            </ApexChart>
+        </div>
+    </div>
+}
+
 <div class="scry-card">
     <div class="scry-card-header"><i class="bi bi-clock-history me-2"></i>Result history (last 100)</div>
     @if (results.Count == 0)
@@ -187,6 +212,14 @@
     private Probe? probe;
     private List<ProbeResult> results = [];
     private ProbeOutcome? latestOutcome;
+    private List<TimeseriesPoint> timeseriesPoints = [];
+    private ApexChartOptions<TimeseriesPoint> chartOptions = new()
+    {
+        Chart = new Chart { Toolbar = new Toolbar { Show = false }, Background = "transparent" },
+        Theme = new Theme { Mode = Mode.Dark },
+        Xaxis = new XAxis { Type = XAxisType.Datetime },
+        Stroke = new Stroke { Curve = [Curve.Smooth] },
+    };
 
     private bool editing;
     private bool confirmDelete;
@@ -199,7 +232,65 @@
     protected override async Task OnInitializedAsync()
     {
         await LoadAsync();
+        await LoadTimeseriesAsync();
     }
+
+    private async Task LoadTimeseriesAsync()
+    {
+        try
+        {
+            await using var ctx = await DbFactory.CreateDbContextAsync();
+            ctx.CurrentWorkspaceId = WorkspaceId;
+
+            var from = DateTimeOffset.UtcNow.AddHours(-24);
+            const int bucketMinutes = 5;
+
+            var sql = $$"""
+                SELECT
+                    date_trunc('minute', "CompletedAt" AT TIME ZONE 'UTC') -
+                        (EXTRACT(MINUTE FROM "CompletedAt" AT TIME ZONE 'UTC')::int % {{bucketMinutes}}) * interval '1 minute'
+                        AS "Bucket",
+                    MODE() WITHIN GROUP (ORDER BY "Outcome") AS "Outcome",
+                    AVG("DurationMs") AS "AvgDurationMs",
+                    COUNT(*) AS "Count"
+                FROM "ProbeResults"
+                WHERE "ProbeId" = {0}
+                  AND "WorkspaceId" = {1}
+                  AND "CompletedAt" >= {2}
+                GROUP BY "Bucket"
+                ORDER BY "Bucket"
+                """;
+
+            var rows = await ctx.Database
+                .SqlQueryRaw<TsRow>(sql, ProbeId, WorkspaceId, from)
+                .ToListAsync();
+
+            timeseriesPoints = rows.Select(r => new TimeseriesPoint(r.Bucket, r.Outcome, r.AvgDurationMs, r.Count)).ToList();
+        }
+        catch
+        {
+            timeseriesPoints = [];
+        }
+    }
+
+    private sealed class TsRow
+    {
+        public DateTimeOffset Bucket { get; set; }
+        public string Outcome { get; set; } = "";
+        public double AvgDurationMs { get; set; }
+        public long Count { get; set; }
+    }
+
+    private static int OutcomeRank(string outcome) => outcome switch
+    {
+        "Ok" => 1,
+        "Warn" => 2,
+        "Error" => 3,
+        "Crit" => 4,
+        _ => 0,
+    };
+
+    private sealed record TimeseriesPoint(DateTimeOffset Bucket, string Outcome, double AvgDurationMs, long Count);
 
     private async Task LoadAsync()
     {

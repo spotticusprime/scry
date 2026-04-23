@@ -1,0 +1,449 @@
+@page "/workspaces/{WorkspaceId:guid}/topology"
+@attribute [Authorize]
+@implements IAsyncDisposable
+@inject IDbContextFactory<ScryDbContext> DbFactory
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+
+<PageTitle>Topology — Scry</PageTitle>
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+        <h1 class="page-title">Topology</h1>
+        <p class="page-subtitle mb-0">Asset dependency graph for this workspace</p>
+    </div>
+    <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-outline-primary" @onclick="ShowAddAsset">
+            <i class="bi bi-plus-circle me-1"></i>Add asset
+        </button>
+        <button class="btn btn-sm btn-outline-secondary" @onclick="RefreshAsync">
+            <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+        </button>
+    </div>
+</div>
+
+@if (addingAsset)
+{
+    <div class="scry-card mb-3">
+        <div class="scry-card-header"><i class="bi bi-plus-circle me-2"></i>Add asset</div>
+        <div class="p-4">
+            <div class="row g-3 mb-3">
+                <div class="col-md-4">
+                    <label class="form-label sidebar-label">Name</label>
+                    <input type="text" class="form-control" @bind="newName" placeholder="e.g. api-server" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label sidebar-label">Kind</label>
+                    <select class="form-select" @bind="newKind">
+                        <option value="Unknown">Unknown</option>
+                        <option value="Domain">Domain</option>
+                        <option value="Host">Host / VM</option>
+                        <option value="Service">Service</option>
+                        <option value="Database">Database</option>
+                        <option value="CloudResource">Cloud Resource</option>
+                        <option value="Certificate">Certificate</option>
+                        <option value="Account">Account</option>
+                        <option value="Network">Network</option>
+                    </select>
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label sidebar-label">External ID (optional)</label>
+                    <input type="text" class="form-control" @bind="newExternalId" placeholder="e.g. /subscriptions/..." />
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label sidebar-label">Description (optional)</label>
+                <input type="text" class="form-control" @bind="newDescription" />
+            </div>
+            @if (assetError is not null)
+            {
+                <div class="alert alert-danger py-2 small">@assetError</div>
+            }
+            <div class="d-flex gap-2">
+                <button class="btn btn-primary" @onclick="CreateAssetAsync">Create</button>
+                <button class="btn btn-outline-secondary" @onclick="() => addingAsset = false">Cancel</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (addingRelationship)
+{
+    <div class="scry-card mb-3">
+        <div class="scry-card-header"><i class="bi bi-diagram-3 me-2"></i>Add relationship</div>
+        <div class="p-4">
+            <div class="row g-3 mb-3">
+                <div class="col-md-4">
+                    <label class="form-label sidebar-label">Source asset</label>
+                    <select class="form-select" @bind="relSourceId">
+                        <option value="">Select…</option>
+                        @foreach (var a in allAssets)
+                        {
+                            <option value="@a.Id">@a.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label sidebar-label">Relationship</label>
+                    <select class="form-select" @bind="relKind">
+                        <option value="DependsOn">Depends on</option>
+                        <option value="Hosts">Hosts</option>
+                        <option value="Contains">Contains</option>
+                        <option value="ConnectsTo">Connects to</option>
+                        <option value="Resolves">Resolves</option>
+                        <option value="Issues">Issues</option>
+                        <option value="Owns">Owns</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label sidebar-label">Target asset</label>
+                    <select class="form-select" @bind="relTargetId">
+                        <option value="">Select…</option>
+                        @foreach (var a in allAssets)
+                        {
+                            <option value="@a.Id">@a.Name</option>
+                        }
+                    </select>
+                </div>
+            </div>
+            @if (relError is not null)
+            {
+                <div class="alert alert-danger py-2 small">@relError</div>
+            }
+            <div class="d-flex gap-2">
+                <button class="btn btn-primary" @onclick="CreateRelationshipAsync">Add</button>
+                <button class="btn btn-outline-secondary" @onclick="() => addingRelationship = false">Cancel</button>
+            </div>
+        </div>
+    </div>
+}
+
+<div class="row g-3" style="height: calc(100vh - 280px); min-height: 400px;">
+    <div class="col-lg-9 h-100">
+        <div class="scry-card h-100">
+            @if (graphData is null)
+            {
+                <div class="p-4 text-center text-muted">Loading topology…</div>
+            }
+            else if (graphData.Nodes.Count == 0)
+            {
+                <div class="p-4 text-center text-muted">
+                    <i class="bi bi-diagram-3 fs-2 d-block mb-2"></i>
+                    No assets yet — add one above.
+                </div>
+            }
+            else
+            {
+                <div id="topology-container" style="width:100%;height:100%;"></div>
+            }
+        </div>
+    </div>
+    <div class="col-lg-3 h-100 overflow-auto">
+        @if (selectedAsset is not null)
+        {
+            <div class="scry-card mb-3">
+                <div class="scry-card-header d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-info-circle me-2"></i>@selectedAsset.Name</span>
+                    <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAssetAsync(selectedAsset.Id)">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+                <div class="p-3">
+                    <div class="sidebar-label">Kind</div>
+                    <p class="mb-2 small">@selectedAsset.Kind</p>
+                    @if (!string.IsNullOrEmpty(selectedAsset.ExternalId))
+                    {
+                        <div class="sidebar-label">External ID</div>
+                        <p class="mb-2 small font-mono">@selectedAsset.ExternalId</p>
+                    }
+                    @if (selectedAsset.Attributes.TryGetValue("description", out var desc))
+                    {
+                        <div class="sidebar-label">Description</div>
+                        <p class="mb-2 small">@desc</p>
+                    }
+                    @if (selectedProbes.Count > 0)
+                    {
+                        <div class="sidebar-label mt-2">Attached probes</div>
+                        @foreach (var p in selectedProbes)
+                        {
+                            <div class="d-flex align-items-center gap-2 mb-1">
+                                <span class="dot @ProbeDotClass(p.Outcome)" style="width:8px;height:8px;flex-shrink:0;"></span>
+                                <a href="/workspaces/@WorkspaceId/probes/@p.Id" class="small text-white text-decoration-none">@p.Name</a>
+                            </div>
+                        }
+                    }
+                    <div class="mt-3">
+                        <button class="btn btn-sm btn-outline-secondary w-100" @onclick="ShowAddRelationship">
+                            <i class="bi bi-diagram-3 me-1"></i>Add relationship
+                        </button>
+                    </div>
+                    <div class="mt-2">
+                        <a href="/workspaces/@WorkspaceId/assets/@selectedAsset.Id" class="btn btn-sm btn-outline-primary w-100">
+                            <i class="bi bi-box-arrow-up-right me-1"></i>Asset detail
+                        </a>
+                    </div>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="scry-card p-3 text-muted small">
+                Click a node to see asset details.
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public Guid WorkspaceId { get; set; }
+
+    private TopologyData? graphData;
+    private List<AssetInfo> allAssets = [];
+    private AssetInfo? selectedAsset;
+    private List<ProbeInfo> selectedProbes = [];
+
+    private bool addingAsset;
+    private string newName = "";
+    private string newKind = "Service";
+    private string newExternalId = "";
+    private string newDescription = "";
+    private string? assetError;
+
+    private bool addingRelationship;
+    private string relSourceId = "";
+    private string relTargetId = "";
+    private string relKind = "DependsOn";
+    private string? relError;
+
+    private DotNetObjectReference<Topology>? dotNetRef;
+    private bool cytoscapeInitialized;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (graphData is not null && graphData.Nodes.Count > 0 && !cytoscapeInitialized)
+        {
+            cytoscapeInitialized = true;
+            dotNetRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("ScryTopology.init", dotNetRef, "topology-container", graphData);
+        }
+        else if (graphData is not null && cytoscapeInitialized)
+        {
+            await JS.InvokeVoidAsync("ScryTopology.update", graphData);
+        }
+    }
+
+    private async Task RefreshAsync()
+    {
+        await using var ctx = await DbFactory.CreateDbContextAsync();
+        ctx.CurrentWorkspaceId = WorkspaceId;
+
+        var assets = await ctx.Assets.OrderBy(a => a.Name).ToListAsync();
+        allAssets = assets.Select(a => new AssetInfo(a.Id, a.Name, a.Kind.ToString(), a.ExternalId, a.Attributes)).ToList();
+
+        var probes = await ctx.Probes.Where(p => p.AssetId != null).ToListAsync();
+        var probeIds = probes.Select(p => p.Id).ToList();
+
+        var latestResults = await ctx.ProbeResults
+            .Where(r => probeIds.Contains(r.ProbeId))
+            .GroupBy(r => r.ProbeId)
+            .Select(g => g.OrderByDescending(r => r.CompletedAt).First())
+            .ToListAsync();
+
+        var resultByProbe = latestResults.ToDictionary(r => r.ProbeId, r => r.Outcome);
+
+        var assetHealth = new Dictionary<Guid, ProbeOutcome?>();
+        foreach (var probe in probes)
+        {
+            if (probe.AssetId is null) { continue; }
+            var assetId = probe.AssetId.Value;
+            if (!resultByProbe.TryGetValue(probe.Id, out var outcome)) { continue; }
+            if (!assetHealth.TryGetValue(assetId, out var current) || current is null || WorstOutcome(outcome, current.Value))
+            {
+                assetHealth[assetId] = outcome;
+            }
+        }
+
+        var relationships = await ctx.AssetRelationships.ToListAsync();
+
+        var nodes = assets.Select(a => new GraphNode(
+            a.Id.ToString(),
+            a.Name,
+            a.Kind.ToString(),
+            assetHealth.TryGetValue(a.Id, out var h) ? h?.ToString() : null)).ToList();
+
+        var edges = relationships.Select(r => new GraphEdge(
+            r.Id.ToString(),
+            r.SourceAssetId.ToString(),
+            r.TargetAssetId.ToString(),
+            r.Kind.ToString())).ToList();
+
+        graphData = new TopologyData(nodes, edges);
+    }
+
+    [JSInvokable]
+    public async Task OnNodeClicked(string nodeId)
+    {
+        if (!Guid.TryParse(nodeId, out var id)) { return; }
+
+        await using var ctx = await DbFactory.CreateDbContextAsync();
+        ctx.CurrentWorkspaceId = WorkspaceId;
+
+        var asset = await ctx.Assets.FirstOrDefaultAsync(a => a.Id == id);
+        if (asset is null) { return; }
+
+        selectedAsset = new AssetInfo(asset.Id, asset.Name, asset.Kind.ToString(), asset.ExternalId, asset.Attributes);
+
+        var probes = await ctx.Probes.Where(p => p.AssetId == id).ToListAsync();
+        var probeIds = probes.Select(p => p.Id).ToList();
+
+        var latestResults = await ctx.ProbeResults
+            .Where(r => probeIds.Contains(r.ProbeId))
+            .GroupBy(r => r.ProbeId)
+            .Select(g => g.OrderByDescending(r => r.CompletedAt).First())
+            .ToListAsync();
+
+        var resultMap = latestResults.ToDictionary(r => r.ProbeId, r => r.Outcome);
+        selectedProbes = probes.Select(p => new ProbeInfo(
+            p.Id, p.Name,
+            resultMap.TryGetValue(p.Id, out var o) ? (ProbeOutcome?)o : null)).ToList();
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void ShowAddAsset()
+    {
+        newName = "";
+        newKind = "Service";
+        newExternalId = "";
+        newDescription = "";
+        assetError = null;
+        addingAsset = true;
+    }
+
+    private void ShowAddRelationship()
+    {
+        relSourceId = selectedAsset?.Id.ToString() ?? "";
+        relTargetId = "";
+        relKind = "DependsOn";
+        relError = null;
+        addingRelationship = true;
+    }
+
+    private async Task CreateAssetAsync()
+    {
+        if (string.IsNullOrWhiteSpace(newName))
+        {
+            assetError = "Name is required.";
+            return;
+        }
+        await using var ctx = await DbFactory.CreateDbContextAsync();
+        var asset = new Asset
+        {
+            WorkspaceId = WorkspaceId,
+            Name = newName.Trim(),
+            Kind = Enum.TryParse<AssetKind>(newKind, out var k) ? k : AssetKind.Unknown,
+            ExternalId = string.IsNullOrWhiteSpace(newExternalId) ? null : newExternalId.Trim(),
+        };
+        if (!string.IsNullOrWhiteSpace(newDescription))
+        {
+            asset.Attributes["description"] = newDescription.Trim();
+        }
+        ctx.Assets.Add(asset);
+        await ctx.SaveChangesAsync();
+        addingAsset = false;
+        cytoscapeInitialized = false;
+        await RefreshAsync();
+    }
+
+    private async Task CreateRelationshipAsync()
+    {
+        if (!Guid.TryParse(relSourceId, out var srcId) || !Guid.TryParse(relTargetId, out var tgtId))
+        {
+            relError = "Select both source and target assets.";
+            return;
+        }
+        if (!Enum.TryParse<RelationshipKind>(relKind, out var kind))
+        {
+            kind = RelationshipKind.DependsOn;
+        }
+        await using var ctx = await DbFactory.CreateDbContextAsync();
+        var rel = new AssetRelationship
+        {
+            WorkspaceId = WorkspaceId,
+            SourceAssetId = srcId,
+            TargetAssetId = tgtId,
+            Kind = kind,
+        };
+        ctx.AssetRelationships.Add(rel);
+        await ctx.SaveChangesAsync();
+        addingRelationship = false;
+        cytoscapeInitialized = false;
+        await RefreshAsync();
+    }
+
+    private async Task DeleteAssetAsync(Guid id)
+    {
+        await using var ctx = await DbFactory.CreateDbContextAsync();
+        ctx.CurrentWorkspaceId = WorkspaceId;
+        var asset = await ctx.Assets.FirstOrDefaultAsync(a => a.Id == id);
+        if (asset is not null)
+        {
+            ctx.Assets.Remove(asset);
+            await ctx.SaveChangesAsync();
+        }
+        selectedAsset = null;
+        selectedProbes = [];
+        cytoscapeInitialized = false;
+        await RefreshAsync();
+    }
+
+    private static bool WorstOutcome(ProbeOutcome incoming, ProbeOutcome current)
+    {
+        static int Rank(ProbeOutcome o) => o switch
+        {
+            ProbeOutcome.Ok => 0,
+            ProbeOutcome.Unknown => 1,
+            ProbeOutcome.Warn => 2,
+            ProbeOutcome.Error => 3,
+            ProbeOutcome.Crit => 4,
+            _ => 0,
+        };
+        return Rank(incoming) > Rank(current);
+    }
+
+    private static string ProbeDotClass(ProbeOutcome? o) => o switch
+    {
+        ProbeOutcome.Ok => "dot-ok",
+        ProbeOutcome.Warn => "dot-warn",
+        ProbeOutcome.Crit => "dot-crit",
+        ProbeOutcome.Error => "dot-error",
+        _ => "dot-unknown",
+    };
+
+    public async ValueTask DisposeAsync()
+    {
+        if (cytoscapeInitialized)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("ScryTopology.destroy");
+            }
+            catch
+            {
+                // ignore JS interop errors on dispose
+            }
+        }
+        dotNetRef?.Dispose();
+    }
+
+    private sealed record AssetInfo(Guid Id, string Name, string Kind, string? ExternalId, Dictionary<string, string> Attributes);
+    private sealed record ProbeInfo(Guid Id, string Name, ProbeOutcome? Outcome);
+    private sealed record GraphNode(string id, string name, string kind, string? health);
+    private sealed record GraphEdge(string id, string source, string target, string kind);
+    private sealed record TopologyData(List<GraphNode> Nodes, List<GraphEdge> Edges);
+}

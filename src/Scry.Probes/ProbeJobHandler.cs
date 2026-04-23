@@ -19,6 +19,7 @@ internal sealed class ProbeJobHandler : IJobHandler
     private readonly IJobQueue _jobQueue;
     private readonly IReadOnlyDictionary<string, IProbeExecutor> _executors;
     private readonly AlertEvaluator _alertEvaluator;
+    private readonly IProbeResultPublisher _publisher;
     private readonly ILogger<ProbeJobHandler> _logger;
 
     public ProbeJobHandler(
@@ -26,11 +27,13 @@ internal sealed class ProbeJobHandler : IJobHandler
         IJobQueue jobQueue,
         IEnumerable<IProbeExecutor> executors,
         AlertEvaluator alertEvaluator,
+        IProbeResultPublisher publisher,
         ILogger<ProbeJobHandler> logger)
     {
         _alertEvaluator = alertEvaluator;
         _factory = factory;
         _jobQueue = jobQueue;
+        _publisher = publisher;
         _logger = logger;
 
         var dict = new Dictionary<string, IProbeExecutor>(StringComparer.OrdinalIgnoreCase);
@@ -89,6 +92,16 @@ internal sealed class ProbeJobHandler : IJobHandler
 
         _logger.LogDebug("Probe {ProbeId} ({Kind}) → {Outcome} in {DurationMs}ms",
             probe.Id, probe.Kind, result.Outcome, result.DurationMs);
+
+        // Real-time publish is best-effort — a failure must not discard the probe result.
+        try
+        {
+            await _publisher.PublishAsync(result, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Real-time publish failed for probe {ProbeId}", probe.Id);
+        }
 
         // Alert evaluation is best-effort — a failure must not discard the probe result.
         try
