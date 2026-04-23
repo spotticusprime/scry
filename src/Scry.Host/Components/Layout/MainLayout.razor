@@ -41,6 +41,11 @@
                 </a>
             </li>
             <li class="nav-item">
+                <a href="@TopologyHref" class="nav-link @ActiveClass("/topology")">
+                    <i class="bi bi-diagram-3 me-2"></i> Topology
+                </a>
+            </li>
+            <li class="nav-item">
                 <a href="@AlertsHref" class="nav-link @ActiveClass("/alerts")">
                     <i class="bi bi-bell-fill me-2"></i> Alerts
                 </a>
@@ -84,7 +89,6 @@
         await using var ctx = await DbFactory.CreateDbContextAsync();
         workspaces = await ctx.Workspaces.OrderBy(w => w.Name).ToListAsync();
 
-        // Infer current workspace from URL
         var uri = new Uri(Nav.Uri);
         var segments = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
         if (segments.Length >= 2 && segments[0] == "workspaces"
@@ -115,6 +119,9 @@
     private string CertsHref => CurrentWorkspaceId.HasValue
         ? $"/workspaces/{CurrentWorkspaceId}/certs" : "/workspaces";
 
+    private string TopologyHref => CurrentWorkspaceId.HasValue
+        ? $"/workspaces/{CurrentWorkspaceId}/topology" : "/workspaces";
+
     private string AlertsHref => CurrentWorkspaceId.HasValue
         ? $"/workspaces/{CurrentWorkspaceId}/alerts" : "/workspaces";
 
@@ -123,12 +130,13 @@
         var path = new Uri(Nav.Uri).AbsolutePath;
         return segment switch
         {
-            "/" => path == "/" || (path.StartsWith("/workspaces/") && !path.Contains("/probes") && !path.Contains("/alerts") && !path.Contains("/certs"))
+            "/" => path == "/" || (path.StartsWith("/workspaces/") && !path.Contains("/probes") && !path.Contains("/alerts") && !path.Contains("/certs") && !path.Contains("/topology"))
                 ? "active" : "",
-            "/probes"     => path.Contains("/probes") ? "active" : "",
-            "/certs"      => path.Contains("/certs") ? "active" : "",
-            "/alerts"     => path.Contains("/alerts") ? "active" : "",
-            "/inventory"  => path == "/inventory" ? "active" : "",
+            "/probes"    => path.Contains("/probes") ? "active" : "",
+            "/certs"     => path.Contains("/certs") ? "active" : "",
+            "/topology"  => path.Contains("/topology") ? "active" : "",
+            "/alerts"    => path.Contains("/alerts") ? "active" : "",
+            "/inventory" => path == "/inventory" ? "active" : "",
             "/workspaces" => path == "/workspaces" ? "active" : "",
             _ => "",
         };
