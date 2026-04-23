@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Scry.Core;
 using Scry.Data;
+using Scry.Probes.Alerts;
 using Scry.Runner;
 
 namespace Scry.Probes;
@@ -16,13 +17,16 @@ internal sealed class ProbeJobHandler : IJobHandler
 
     private readonly IDbContextFactory<ScryDbContext> _factory;
     private readonly IReadOnlyDictionary<string, IProbeExecutor> _executors;
+    private readonly AlertEvaluator _alertEvaluator;
     private readonly ILogger<ProbeJobHandler> _logger;
 
     public ProbeJobHandler(
         IDbContextFactory<ScryDbContext> factory,
         IEnumerable<IProbeExecutor> executors,
+        AlertEvaluator alertEvaluator,
         ILogger<ProbeJobHandler> logger)
     {
+        _alertEvaluator = alertEvaluator;
         _factory = factory;
         _logger = logger;
 
@@ -84,5 +88,15 @@ internal sealed class ProbeJobHandler : IJobHandler
 
         _logger.LogDebug("Probe {ProbeId} ({Kind}) → {Outcome} in {DurationMs}ms",
             probe.Id, probe.Kind, result.Outcome, result.DurationMs);
+
+        // Alert evaluation is best-effort — a failure must not discard the probe result.
+        try
+        {
+            await _alertEvaluator.EvaluateAsync(result, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Alert evaluation failed for probe {ProbeId}", probe.Id);
+        }
     }
 }

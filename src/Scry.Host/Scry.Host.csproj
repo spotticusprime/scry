@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <RootNamespace>Scry.Host</RootNamespace>
+    <AssemblyName>scry</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Scry.Api\Scry.Api.csproj" />
+    <ProjectReference Include="..\Scry.Data\Scry.Data.csproj" />
+    <ProjectReference Include="..\Scry.Probes\Scry.Probes.csproj" />
+    <ProjectReference Include="..\Scry.Runner\Scry.Runner.csproj" />
+  </ItemGroup>
+
+</Project>

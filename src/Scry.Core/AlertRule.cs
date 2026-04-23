@@ -16,6 +16,12 @@ public class AlertRule
     public AlertSeverity Severity { get; set; } = AlertSeverity.Warning;
     public bool Enabled { get; set; } = true;
     public TimeSpan For { get; set; } = TimeSpan.Zero;
+    // Phase 1 expression: comma-separated ProbeOutcome names that trigger the rule.
+    // e.g. "Warn,Crit" or "Crit" or "Error,Crit"
+    // When null, matches all probes in the workspace; when set, scopes to one probe.
+    public Guid? ProbeIdFilter { get; set; }
+    // JSON config for the notifier: {"kind":"webhook","url":"https://..."}
+    public string? NotifierConfig { get; set; }
     public DateTimeOffset CreatedAt { get; init; }
     public DateTimeOffset UpdatedAt { get; set; }
 }

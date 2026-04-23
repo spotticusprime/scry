@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Scry.Api</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Scry.Core\Scry.Core.csproj" />
+    <ProjectReference Include="..\Scry.Data\Scry.Data.csproj" />
+    <ProjectReference Include="..\Scry.Probes\Scry.Probes.csproj" />
+  </ItemGroup>
+
+</Project>
