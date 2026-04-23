@@ -1,6 +1,9 @@
 @page "/workspaces/{WorkspaceId:guid}/probes"
+@rendermode InteractiveServer
 @attribute [Authorize]
 @inject IDbContextFactory<ScryDbContext> DbFactory
+@inject NavigationManager Nav
+@using Scry.Probes
 
 <PageTitle>Probes — Scry</PageTitle>
 
@@ -9,7 +12,54 @@
         <h1 class="page-title">Probes</h1>
         <p class="page-subtitle mb-0">@probes.Count probe(s) in this workspace</p>
     </div>
+    @if (!creating)
+    {
+        <button class="btn btn-primary btn-sm" @onclick="() => creating = true">
+            <i class="bi bi-plus-lg me-1"></i>New probe
+        </button>
+    }
 </div>
+
+@if (creating)
+{
+    <div class="scry-card mb-4">
+        <div class="scry-card-header"><i class="bi bi-plus-circle me-2"></i>New probe</div>
+        <div class="p-4">
+            <div class="row g-3 mb-3">
+                <div class="col-md-5">
+                    <label class="form-label sidebar-label">Name</label>
+                    <input type="text" class="form-control" @bind="newName" placeholder="My service — HTTPS" autofocus />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label sidebar-label">Kind</label>
+                    <select class="form-select" @bind="newKind">
+                        <option value="http">http</option>
+                        <option value="tls">tls</option>
+                        <option value="dns">dns</option>
+                        <option value="azure_metric">azure_metric</option>
+                        <option value="sql_kpi">sql_kpi</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label sidebar-label">Interval (HH:MM:SS)</label>
+                    <input type="text" class="form-control font-mono" @bind="newInterval" placeholder="00:05:00" />
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label sidebar-label">Definition (YAML)</label>
+                <textarea class="form-control font-mono" rows="10" @bind="newDefinition" placeholder="@Placeholder(newKind)"></textarea>
+            </div>
+            @if (createError is not null)
+            {
+                <div class="alert alert-danger py-2 small">@createError</div>
+            }
+            <div class="d-flex gap-2">
+                <button class="btn btn-primary" @onclick="CreateAsync">Create probe</button>
+                <button class="btn btn-outline-secondary" @onclick="CancelCreate">Cancel</button>
+            </div>
+        </div>
+    </div>
+}
 
 <div class="scry-card">
     <div class="scry-card-header"><i class="bi bi-broadcast me-2"></i>All probes</div>
@@ -17,8 +67,7 @@
     {
         <div class="p-4 text-center text-muted">
             <i class="bi bi-broadcast fs-2 d-block mb-2"></i>
-            <p>No probes yet.</p>
-            <code class="font-mono">POST /api/workspaces/@WorkspaceId/probes</code>
+            <p>No probes yet. Use the <strong>New probe</strong> button above.</p>
         </div>
     }
     else
@@ -43,7 +92,7 @@
                         <td><span class="dot @DotClass(row.Outcome)"></span></td>
                         <td>
                             <a href="/workspaces/@WorkspaceId/probes/@row.Probe.Id"
-                               class="text-white text-decoration-none fw-medium">@row.Probe.Name</a>
+                               class="text-decoration-none fw-medium">@row.Probe.Name</a>
                         </td>
                         <td><span class="font-mono text-muted">@row.Probe.Kind</span></td>
                         <td class="text-muted">@row.Probe.Interval</td>
@@ -62,14 +111,10 @@
                         </td>
                         <td class="text-muted">@Ago(row.CompletedAt)</td>
                         <td>
-                            @if (row.Probe.Enabled)
-                            {
-                                <span class="badge bg-success bg-opacity-25 text-success">Active</span>
-                            }
-                            else
-                            {
-                                <span class="badge bg-secondary bg-opacity-25 text-secondary">Paused</span>
-                            }
+                            <button class="btn btn-sm @(row.Probe.Enabled ? "btn-outline-secondary" : "btn-outline-success")"
+                                    @onclick="() => ToggleEnabledAsync(row.Probe.Id, !row.Probe.Enabled)">
+                                @(row.Probe.Enabled ? "Pause" : "Resume")
+                            </button>
                         </td>
                     </tr>
                 }
@@ -83,7 +128,19 @@
 
     private List<ProbeRow> probes = [];
 
+    private bool creating;
+    private string newName = "";
+    private string newKind = "http";
+    private string newInterval = "00:05:00";
+    private string newDefinition = "";
+    private string? createError;
+
     protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
     {
         await using var ctx = await DbFactory.CreateDbContextAsync();
         ctx.CurrentWorkspaceId = WorkspaceId;
@@ -103,6 +160,72 @@
             return new ProbeRow(p, result?.Outcome, result?.Message, result?.CompletedAt);
         }).ToList();
     }
+
+    private void CancelCreate()
+    {
+        creating = false;
+        createError = null;
+        newName = "";
+        newKind = "http";
+        newInterval = "00:05:00";
+        newDefinition = "";
+    }
+
+    private async Task CreateAsync()
+    {
+        if (string.IsNullOrWhiteSpace(newName))
+        {
+            createError = "Name is required.";
+            return;
+        }
+        if (!TimeSpan.TryParse(newInterval, out var interval) || interval <= TimeSpan.Zero)
+        {
+            createError = "Interval must be a valid time span (e.g. 00:05:00).";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(newDefinition))
+        {
+            createError = "Definition is required.";
+            return;
+        }
+
+        await using var ctx = await DbFactory.CreateDbContextAsync();
+        var probe = new Probe
+        {
+            WorkspaceId = WorkspaceId,
+            Name = newName.Trim(),
+            Kind = newKind,
+            Definition = newDefinition,
+            Interval = interval,
+        };
+        ctx.Probes.Add(probe);
+        ctx.Jobs.Add(ScryProbesExtensions.CreateInitialProbeJob(probe));
+        await ctx.SaveChangesAsync();
+
+        CancelCreate();
+        await LoadAsync();
+    }
+
+    private async Task ToggleEnabledAsync(Guid probeId, bool enabled)
+    {
+        await using var ctx = await DbFactory.CreateDbContextAsync();
+        ctx.CurrentWorkspaceId = WorkspaceId;
+        var p = await ctx.Probes.FirstOrDefaultAsync(x => x.Id == probeId);
+        if (p is null) return;
+        p.Enabled = enabled;
+        await ctx.SaveChangesAsync();
+        await LoadAsync();
+    }
+
+    private static string Placeholder(string kind) => kind switch
+    {
+        "http" => "url: https://example.com\nexpected_status: 200\ntimeout: 00:00:15",
+        "tls"  => "host: example.com\nwarn_days: 30\ncrit_days: 7",
+        "dns"  => "host: example.com\ntimeout: 00:00:10",
+        "azure_metric" => "subscription_id: \"<sub-id>\"\nresource_group: \"<rg>\"\nresource_name: \"<name>\"\nresource_type: Microsoft.Web/sites\nmetrics:\n  - name: CpuPercentage\n    warn_threshold: 70\n    crit_threshold: 90",
+        "sql_kpi" => "connection_string_name: MyDb\nquery: \"SELECT TOP 1 CreatedAt FROM Orders ORDER BY CreatedAt DESC\"\ndescription: Last order\nwarn_age_minutes: 30\ncrit_age_minutes: 60",
+        _ => "",
+    };
 
     private static string DotClass(ProbeOutcome? o) => o switch
     {
