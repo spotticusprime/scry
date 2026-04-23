@@ -16,7 +16,7 @@
 **Prerequisites:** [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
 
 ```bash
-git clone https://github.com/your-org/scry
+git clone https://github.com/spotticusprime/scry
 cd scry
 dotnet run --project src/Scry.Host
 ```
@@ -113,7 +113,7 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-Type=notify
+Type=simple
 User=scry
 Group=scry
 WorkingDirectory=/opt/scry
@@ -170,7 +170,7 @@ Create `Dockerfile` at the repo root:
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
-COPY Directory.Build.props Directory.Packages.props ./
+COPY global.json Directory.Build.props Directory.Packages.props ./
 COPY src/ src/
 RUN dotnet publish src/Scry.Host \
     --configuration Release \
@@ -237,7 +237,8 @@ services:
       Scry__Runner__PollInterval: "00:00:05"
       Scry__Runner__LeaseDuration: "00:05:00"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      # Uses wget (available in the aspnet runtime image) rather than curl.
+      test: ["CMD", "wget", "--quiet", "--spider", "http://localhost:8080/healthz"]
       interval: 30s
       timeout: 5s
       retries: 3

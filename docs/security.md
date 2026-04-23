@@ -124,6 +124,8 @@ On cloud VMs (AWS EC2, GCP, Azure):
 
 Until Scry has built-in authentication, the simplest production-grade approach is to require a static API key at the nginx layer.
 
+> **Security note:** The key value below is stored in the nginx config file in plaintext. Anyone who can read `/etc/nginx/sites-available/scry` will see it. Restrict file permissions (`chmod 640`, owned by `root:www-data`) and rotate the key periodically. nginx `if` string comparison is also not constant-time, so this is suitable for internal/VPN deployments but not as a substitute for properly authenticated access in multi-tenant or internet-facing contexts.
+
 ```nginx
 server {
     # ... TLS config as in deployment.md ...

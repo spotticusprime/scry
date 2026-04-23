@@ -11,8 +11,8 @@ Every probe run produces one of these outcomes:
 | `Ok` | All conditions passed |
 | `Warn` | Partial or advisory failure (e.g. cert expiring, unexpected DNS address) |
 | `Crit` | Hard failure threshold exceeded |
-| `Error` | Probe configuration error or unhandled exception |
-| `Timeout` | Probe exceeded its configured timeout |
+| `Error` | Probe failed — covers network errors, timeouts, connection refused, and configuration problems |
+| `Unknown` | Initial state; should not appear in completed results |
 
 ---
 
@@ -33,8 +33,7 @@ headers:
 **Outcomes:**
 - `Ok` — status code matches (or is 2xx if `expected_status` is omitted), body contains match passes
 - `Crit` — status code mismatch or body substring not found
-- `Timeout` — connection or response exceeded `timeout`
-- `Error` — invalid URL, DNS failure, or unhandled network error
+- `Error` — connection timeout, DNS failure, invalid URL, or unhandled network error
 
 ---
 
@@ -56,12 +55,13 @@ headers:
 **Path examples:**
 - `status` — top-level field `{"status":"ok"}`
 - `data.health` — nested `{"data":{"health":"healthy"}}`
-- `items.0.name` — first element of an array `{"items":[{"name":"foo"}]}`
+
+> **Note:** Only object property traversal is supported. Numeric array indexes (e.g. `items.0.name`) are not currently handled and will return `Crit` (path not found).
 
 **Outcomes:**
 - `Ok` — status code matches, path resolves, value matches `expected_value` (or `expected_value` is omitted)
 - `Crit` — status code mismatch, path not found, or value mismatch
-- `Timeout` / `Error` — same as `http`
+- `Error` — same as `http`
 
 ---
 
@@ -78,7 +78,7 @@ timeout: 00:00:10                    # default: 10 s
 **Outcomes:**
 - `Ok` — TCP handshake completed within `timeout`
 - `Crit` — connection refused or host unreachable
-- `Timeout` — connection did not complete within `timeout`
+- `Error` — connection did not complete within `timeout` or unhandled network error
 
 ---
 
@@ -96,7 +96,7 @@ expected_address: 93.184.216.34      # optional; IPv4 or IPv6
 - `Ok` — hostname resolved (and `expected_address` is in the result set, if specified)
 - `Warn` — hostname resolved but `expected_address` is absent. `Warn` rather than `Crit` because the host still resolves — the address difference may be a legitimate DNS change (failover, CDN shift).
 - `Crit` — hostname did not resolve at all
-- `Timeout` — resolution did not complete within `timeout`
+- `Error` — resolution did not complete within `timeout` or unhandled resolver error
 
 ---
 
@@ -118,15 +118,15 @@ validate_remote_certificate: false   # default: false; set true to enforce full 
 **Outcomes:**
 - `Ok` — certificate is valid and expires more than `warn_days` from now
 - `Warn` — certificate expires within `warn_days` (but not within `crit_days`)
-- `Crit` — certificate is expired or expires within `crit_days`
-- `Error` — TLS handshake failed (invalid cert with `validate_remote_certificate: true`, wrong host, etc.)
-- `Timeout` — connection did not complete within `timeout`
+- `Crit` — certificate is expired or expires within `crit_days`; also returned for hard TLS failures (connection refused, auth error)
+- `Error` — connection timeout, no certificate returned, or unhandled network error
 
 **Certificate metadata** stored in `ProbeResult.Attributes`:
-- `subject` — certificate subject (CN)
-- `issuer` — issuing CA
-- `expires_at` — ISO 8601 expiry timestamp
-- `days_remaining` — integer days until expiry
+- `subject` — certificate subject (e.g. `CN=example.com`)
+- `expires_at` — ISO 8601 expiry timestamp (UTC)
+- `days_left` — integer days until expiry
+- `host` — probed hostname
+- `port` — probed port
 
 ---
 
@@ -149,6 +149,4 @@ The minimum practical interval is a few seconds; very short intervals will incre
 
 Setting `enabled: false` via `PUT /api/workspaces/{wsId}/probes/{id}` (or `DELETE`, which sets enabled to false) stops the recurring job loop. The probe is not deleted and its history is preserved.
 
-To restart a disabled probe, set `enabled: true` — Scry will enqueue a new initial job automatically on the next `PUT`.
-
-> **Note:** In the current implementation, re-enabling a probe via PUT does not automatically re-seed the job loop. You must POST a new probe or use the API to trigger a new initial job. This is a known gap tracked for a future release.
+To restart a disabled probe, delete it and recreate it via `POST`. Re-enabling via `PUT` (setting `enabled: true`) marks the probe active in the database but does **not** automatically re-seed the job loop — the recurring run will not resume. This is a known gap tracked for a future release.

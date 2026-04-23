@@ -141,7 +141,7 @@ Create a probe and seed its first job run.
 | Field | Type | Required | Default | Notes |
 |-------|------|----------|---------|-------|
 | `name` | string | yes | — | Display name |
-| `kind` | string | yes | — | `http`, `json_http`, `tcp`, `dns`, `tls` |
+| `kind` | string | yes | — | `http`, `json_http`, `tcp`, `dns`, `tls` — see [probe docs](probes.md) |
 | `definition` | string | yes | — | YAML config for the probe kind |
 | `interval` | TimeSpan | no | `00:05:00` | How often to run, e.g. `00:01:00` |
 
@@ -188,7 +188,7 @@ List all alert rules, ordered by name.
     "id": "...",
     "workspaceId": "...",
     "name": "API down",
-    "expression": "Crit,Error,Timeout",
+    "expression": "Crit,Error",
     "severity": "Critical",
     "enabled": true,
     "probeIdFilter": null,
@@ -214,7 +214,7 @@ Create an alert rule.
 ```json
 {
   "name": "API down",
-  "expression": "Crit,Error,Timeout",
+  "expression": "Crit,Error",
   "severity": "Critical",
   "probeIdFilter": null,
   "notifierConfig": "{\"kind\":\"webhook\",\"url\":\"https://hooks.example.com/alert\",\"method\":\"POST\",\"headers\":{\"Authorization\":\"Bearer token\"}}"
@@ -224,7 +224,7 @@ Create an alert rule.
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
 | `name` | string | yes | Display name |
-| `expression` | string | yes | Comma-separated `ProbeOutcome` values that trigger the alert: `Ok`, `Warn`, `Crit`, `Error`, `Timeout` |
+| `expression` | string | yes | Comma-separated `ProbeOutcome` values that trigger the alert: `Ok`, `Warn`, `Crit`, `Error` |
 | `severity` | string | yes | `Info`, `Warning`, `Critical` |
 | `probeIdFilter` | GUID or null | no | When set, rule only applies to this probe |
 | `notifierConfig` | JSON string or null | no | Notifier configuration (see [Notifiers](#notifiers)) |

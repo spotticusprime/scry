@@ -9,7 +9,7 @@ Self-hosted asset inventory and monitoring. Define probes that check your servic
 **Prerequisites:** [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
 
 ```bash
-git clone https://github.com/your-org/scry
+git clone https://github.com/spotticusprime/scry
 cd scry
 dotnet run --project src/Scry.Host
 ```
@@ -88,14 +88,14 @@ curl -X POST http://localhost:5000/api/workspaces/{wsId}/probes \
 
 ## Alert rules
 
-Alert rules evaluate probe outcomes and fire notifications. The `expression` field is a comma-separated list of `ProbeOutcome` values (`Ok`, `Warn`, `Crit`, `Error`, `Timeout`) that trigger the alert.
+Alert rules evaluate probe outcomes and fire notifications. The `expression` field is a comma-separated list of `ProbeOutcome` values (`Ok`, `Warn`, `Crit`, `Error`) that trigger the alert.
 
 ```bash
 curl -X POST http://localhost:5000/api/workspaces/{wsId}/alerts \
   -H 'Content-Type: application/json' \
   -d '{
     "name": "API down",
-    "expression": "Crit,Error,Timeout",
+    "expression": "Crit,Error",
     "severity": "Critical",
     "notifierConfig": "{\"kind\":\"webhook\",\"url\":\"https://hooks.example.com/alert\",\"method\":\"POST\"}"
   }'
