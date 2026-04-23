@@ -2,6 +2,7 @@
 @page "/workspaces"
 @attribute [Authorize]
 @inject IDbContextFactory<ScryDbContext> DbFactory
+@inject IDbContextFactory<ScryJobDbContext> JobDbFactory
 @inject NavigationManager Nav
 
 <PageTitle>Workspaces — Scry</PageTitle>
@@ -235,6 +236,10 @@ else
         {
             ctx.Workspaces.Remove(ws);
             await ctx.SaveChangesAsync();
+
+            // Purge orphaned jobs from MySQL — no cross-DB FK so this must be explicit.
+            await using var jobCtx = await JobDbFactory.CreateDbContextAsync();
+            await jobCtx.Jobs.Where(j => j.WorkspaceId == id).ExecuteDeleteAsync();
         }
         confirmDeleteId = null;
         await LoadAsync();

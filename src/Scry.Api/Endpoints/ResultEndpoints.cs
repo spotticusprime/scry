@@ -10,7 +10,7 @@ internal static class ResultEndpoints
 {
     internal static IEndpointRouteBuilder MapResultEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/workspaces/{workspaceId:guid}/results").WithTags("Results");
+        var group = app.MapGroup("/workspaces/{workspaceId:guid}/results").WithTags("Results");
 
         // Latest result per probe.
         group.MapGet("/latest", async (Guid workspaceId, ScryDbContext ctx) =>

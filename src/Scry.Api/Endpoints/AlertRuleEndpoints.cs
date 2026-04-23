@@ -11,7 +11,7 @@ internal static class AlertRuleEndpoints
 {
     internal static IEndpointRouteBuilder MapAlertRuleEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/workspaces/{workspaceId:guid}/alerts").WithTags("AlertRules");
+        var group = app.MapGroup("/workspaces/{workspaceId:guid}/alerts").WithTags("AlertRules");
 
         group.MapGet("/", async (Guid workspaceId, ScryDbContext ctx) =>
         {

@@ -213,8 +213,13 @@
         ctx.CurrentWorkspaceId = WorkspaceId;
         var p = await ctx.Probes.FirstOrDefaultAsync(x => x.Id == probeId);
         if (p is null) return;
+        var wasDisabled = !p.Enabled;
         p.Enabled = enabled;
         await ctx.SaveChangesAsync();
+        if (enabled && wasDisabled)
+        {
+            await JobQueue.EnqueueAsync(ScryProbesExtensions.CreateInitialProbeJob(p));
+        }
         await LoadAsync();
     }
 

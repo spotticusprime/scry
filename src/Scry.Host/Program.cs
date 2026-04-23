@@ -11,6 +11,9 @@ using Scry.Runner;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// appsettings.Local.json is gitignored — put real connection strings and passwords there.
+builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: false);
+
 // ─── Data ────────────────────────────────────────────────────────────────────
 var pgConn = builder.Configuration.GetConnectionString("Postgres")
     ?? throw new InvalidOperationException("ConnectionStrings:Postgres is required.");
@@ -112,7 +115,8 @@ app.MapPost("/auth/login", async (HttpContext ctx, IConfiguration config) =>
     await ctx.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme,
         new ClaimsPrincipal(identity));
 
-    var redirect = string.IsNullOrWhiteSpace(returnUrl) ? "/" : returnUrl;
+    // Only allow local redirects to prevent open redirect attacks.
+    var redirect = returnUrl is { Length: > 0 } r && r.StartsWith('/') && !r.StartsWith("//") ? r : "/";
     return Results.Redirect(redirect);
 }).AllowAnonymous();
 

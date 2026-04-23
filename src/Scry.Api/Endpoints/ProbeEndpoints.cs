@@ -12,7 +12,7 @@ internal static class ProbeEndpoints
 {
     internal static IEndpointRouteBuilder MapProbeEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/workspaces/{workspaceId:guid}/probes").WithTags("Probes");
+        var group = app.MapGroup("/workspaces/{workspaceId:guid}/probes").WithTags("Probes");
 
         group.MapGet("/", async (Guid workspaceId, ScryDbContext ctx) =>
         {
@@ -44,7 +44,7 @@ internal static class ProbeEndpoints
             return Results.Created($"/api/workspaces/{workspaceId}/probes/{probe.Id}", ToDto(probe));
         });
 
-        group.MapPut("/{id:guid}", async (Guid workspaceId, Guid id, UpdateProbeRequest req, ScryDbContext ctx) =>
+        group.MapPut("/{id:guid}", async (Guid workspaceId, Guid id, UpdateProbeRequest req, ScryDbContext ctx, IJobQueue jobQueue) =>
         {
             ctx.CurrentWorkspaceId = workspaceId;
             var p = await ctx.Probes.FirstOrDefaultAsync(p => p.Id == id);
@@ -52,11 +52,17 @@ internal static class ProbeEndpoints
             {
                 return Results.NotFound();
             }
+            var wasDisabled = !p.Enabled;
             p.Name = req.Name ?? p.Name;
             p.Definition = req.Definition ?? p.Definition;
             p.Interval = req.Interval ?? p.Interval;
             p.Enabled = req.Enabled ?? p.Enabled;
             await ctx.SaveChangesAsync();
+            // Re-seed the job loop when a previously-disabled probe is re-enabled.
+            if (p.Enabled && wasDisabled)
+            {
+                await jobQueue.EnqueueAsync(ScryProbesExtensions.CreateInitialProbeJob(p));
+            }
             return Results.Ok(ToDto(p));
         });
 
