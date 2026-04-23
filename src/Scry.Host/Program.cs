@@ -88,9 +88,13 @@ app.UseAuthorization();
 app.UseAntiforgery();
 
 // ─── Auth endpoints ───────────────────────────────────────────────────────────
-app.MapPost("/auth/login", async (HttpContext ctx, IConfiguration config,
-    string? username, string? password, string? returnUrl) =>
+app.MapPost("/auth/login", async (HttpContext ctx, IConfiguration config) =>
 {
+    var form = ctx.Request.Form;
+    var username = form["username"].ToString();
+    var password = form["password"].ToString();
+    var returnUrl = form["returnUrl"].ToString();
+
     var expectedUser = config["Scry:Auth:Username"] ?? "admin";
     var expectedPass = config["Scry:Auth:Password"];
 
