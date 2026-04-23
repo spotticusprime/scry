@@ -5,16 +5,13 @@ namespace Scry.Data;
 
 internal sealed class ScryDbContextFactory : IDesignTimeDbContextFactory<ScryDbContext>
 {
-    private const string ConnectionStringEnvVar = "SCRY_DESIGN_CONNECTION";
-    private const string DefaultConnectionString = "Data Source=scry-design.db";
-
     public ScryDbContext CreateDbContext(string[] args)
     {
-        var connectionString = Environment.GetEnvironmentVariable(ConnectionStringEnvVar) ?? DefaultConnectionString;
+        var cs = Environment.GetEnvironmentVariable("SCRY_PGSQL_CONNECTION")
+            ?? throw new InvalidOperationException("Set SCRY_PGSQL_CONNECTION for migrations.");
         var options = new DbContextOptionsBuilder<ScryDbContext>()
-            .UseSqlite(connectionString)
+            .UseNpgsql(cs)
             .Options;
-
         return new ScryDbContext(options);
     }
 }

@@ -1,7 +1,6 @@
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Scry.Core;
-using Scry.Data.Converters;
 
 namespace Scry.Data;
 
@@ -24,39 +23,14 @@ public class ScryDbContext : DbContext
     public DbSet<AssetRelationship> AssetRelationships => Set<AssetRelationship>();
     public DbSet<Probe> Probes => Set<Probe>();
     public DbSet<ProbeResult> ProbeResults => Set<ProbeResult>();
-    public DbSet<Job> Jobs => Set<Job>();
     public DbSet<AlertRule> AlertRules => Set<AlertRule>();
     public DbSet<AlertEvent> AlertEvents => Set<AlertEvent>();
     public DbSet<MaintenanceWindow> MaintenanceWindows => Set<MaintenanceWindow>();
-
-    private static readonly DateTimeOffsetToTicksConverter DtoConverter = new();
-    private static readonly NullableDateTimeOffsetToTicksConverter NullableDtoConverter = new();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(Assembly.GetExecutingAssembly());
-
-        // SQLite has no native DateTimeOffset type and cannot run < / > on the ISO-8601
-        // text EF writes by default. Scoped to SQLite so a future Postgres provider gets
-        // native timestamptz and doesn't end up with bigint columns full of ticks.
-        if (Database.IsSqlite())
-        {
-            foreach (var entityType in modelBuilder.Model.GetEntityTypes())
-            {
-                foreach (var property in entityType.GetProperties())
-                {
-                    if (property.ClrType == typeof(DateTimeOffset))
-                    {
-                        property.SetValueConverter(DtoConverter);
-                    }
-                    else if (property.ClrType == typeof(DateTimeOffset?))
-                    {
-                        property.SetValueConverter(NullableDtoConverter);
-                    }
-                }
-            }
-        }
 
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
         {

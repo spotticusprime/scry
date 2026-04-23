@@ -1,8 +1,10 @@
 @page "/workspaces/{WorkspaceId:guid}/probes"
 @attribute [Authorize]
 @inject IDbContextFactory<ScryDbContext> DbFactory
+@inject IJobQueue JobQueue
 @inject NavigationManager Nav
 @using Scry.Probes
+@using Scry.Core
 
 <PageTitle>Probes — Scry</PageTitle>
 
@@ -198,8 +200,8 @@
             Interval = interval,
         };
         ctx.Probes.Add(probe);
-        ctx.Jobs.Add(ScryProbesExtensions.CreateInitialProbeJob(probe));
         await ctx.SaveChangesAsync();
+        await JobQueue.EnqueueAsync(ScryProbesExtensions.CreateInitialProbeJob(probe));
 
         CancelCreate();
         await LoadAsync();

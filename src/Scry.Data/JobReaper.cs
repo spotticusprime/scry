@@ -6,12 +6,12 @@ namespace Scry.Data;
 
 internal sealed class JobReaper : BackgroundService
 {
-    private readonly IDbContextFactory<ScryDbContext> _factory;
+    private readonly IDbContextFactory<ScryJobDbContext> _factory;
     private readonly TimeSpan _interval;
 
-    public JobReaper(IDbContextFactory<ScryDbContext> factory) : this(factory, TimeSpan.FromSeconds(30)) { }
+    public JobReaper(IDbContextFactory<ScryJobDbContext> factory) : this(factory, TimeSpan.FromSeconds(30)) { }
 
-    internal JobReaper(IDbContextFactory<ScryDbContext> factory, TimeSpan interval)
+    internal JobReaper(IDbContextFactory<ScryJobDbContext> factory, TimeSpan interval)
     {
         _factory = factory;
         _interval = interval;

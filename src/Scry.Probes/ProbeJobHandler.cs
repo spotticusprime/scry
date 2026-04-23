@@ -16,18 +16,21 @@ internal sealed class ProbeJobHandler : IJobHandler
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
     private readonly IDbContextFactory<ScryDbContext> _factory;
+    private readonly IJobQueue _jobQueue;
     private readonly IReadOnlyDictionary<string, IProbeExecutor> _executors;
     private readonly AlertEvaluator _alertEvaluator;
     private readonly ILogger<ProbeJobHandler> _logger;
 
     public ProbeJobHandler(
         IDbContextFactory<ScryDbContext> factory,
+        IJobQueue jobQueue,
         IEnumerable<IProbeExecutor> executors,
         AlertEvaluator alertEvaluator,
         ILogger<ProbeJobHandler> logger)
     {
         _alertEvaluator = alertEvaluator;
         _factory = factory;
+        _jobQueue = jobQueue;
         _logger = logger;
 
         var dict = new Dictionary<string, IProbeExecutor>(StringComparer.OrdinalIgnoreCase);
@@ -72,19 +75,17 @@ internal sealed class ProbeJobHandler : IJobHandler
 
         var result = await executor.ExecuteAsync(probe, ct);
 
-        // Add result and next-run job in the same SaveChangesAsync so they succeed or fail together.
-        // Using ctx.Jobs.Add directly avoids opening a second context (which IJobQueue.EnqueueAsync does).
         ctx.ProbeResults.Add(result);
-        ctx.Jobs.Add(new Job
+        await ctx.SaveChangesAsync(ct);
+
+        await _jobQueue.EnqueueAsync(new Job
         {
             WorkspaceId = probe.WorkspaceId,
             Kind = JobKind,
             Payload = JsonSerializer.Serialize(new ProbeJobPayload { ProbeId = probe.Id }, JsonOptions),
             RunAfter = DateTimeOffset.UtcNow + probe.Interval,
             MaxAttempts = 3,
-        });
-
-        await ctx.SaveChangesAsync(ct);
+        }, ct);
 
         _logger.LogDebug("Probe {ProbeId} ({Kind}) → {Outcome} in {DurationMs}ms",
             probe.Id, probe.Kind, result.Outcome, result.DurationMs);

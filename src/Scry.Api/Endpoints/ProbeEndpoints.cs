@@ -28,7 +28,7 @@ internal static class ProbeEndpoints
             return p is null ? Results.NotFound() : Results.Ok(ToDto(p));
         });
 
-        group.MapPost("/", async (Guid workspaceId, CreateProbeRequest req, ScryDbContext ctx) =>
+        group.MapPost("/", async (Guid workspaceId, CreateProbeRequest req, ScryDbContext ctx, IJobQueue jobQueue) =>
         {
             var probe = new Probe
             {
@@ -39,9 +39,8 @@ internal static class ProbeEndpoints
                 Interval = req.Interval ?? TimeSpan.FromMinutes(5),
             };
             ctx.Probes.Add(probe);
-            // Seed the first job to start the recurring probe loop.
-            ctx.Jobs.Add(ScryProbesExtensions.CreateInitialProbeJob(probe));
             await ctx.SaveChangesAsync();
+            await jobQueue.EnqueueAsync(ScryProbesExtensions.CreateInitialProbeJob(probe));
             return Results.Created($"/api/workspaces/{workspaceId}/probes/{probe.Id}", ToDto(probe));
         });
 

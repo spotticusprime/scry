@@ -12,21 +12,13 @@ using Scry.Runner;
 var builder = WebApplication.CreateBuilder(args);
 
 // ─── Data ────────────────────────────────────────────────────────────────────
-var configuredPath = builder.Configuration["Scry:DatabasePath"];
-var dbPath = string.IsNullOrWhiteSpace(configuredPath)
-    ? Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "scry", "scry.db")
-    : Path.GetFullPath(configuredPath);
+var pgConn = builder.Configuration.GetConnectionString("Postgres")
+    ?? throw new InvalidOperationException("ConnectionStrings:Postgres is required.");
+var myConn = builder.Configuration.GetConnectionString("MySql")
+    ?? throw new InvalidOperationException("ConnectionStrings:MySql is required.");
 
-var dbDir = Path.GetDirectoryName(dbPath);
-if (!string.IsNullOrEmpty(dbDir))
-{
-    Directory.CreateDirectory(dbDir);
-}
-
-builder.Services.AddDbContextFactory<ScryDbContext>(opt =>
-    opt.UseSqlite($"Data Source={dbPath}"));
+builder.Services.AddDbContextFactory<ScryDbContext>(opt => opt.UseNpgsql(pgConn));
+builder.Services.AddDbContextFactory<ScryJobDbContext>(opt => opt.UseMySQL(myConn));
 
 builder.Services.AddScryJobQueue();
 
@@ -78,9 +70,13 @@ var app = builder.Build();
 // Apply pending migrations on startup.
 using (var scope = app.Services.CreateScope())
 {
-    var db = scope.ServiceProvider.GetRequiredService<IDbContextFactory<ScryDbContext>>();
-    await using var ctx = await db.CreateDbContextAsync();
-    await ctx.Database.MigrateAsync();
+    var pgFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<ScryDbContext>>();
+    await using var pgCtx = await pgFactory.CreateDbContextAsync();
+    await pgCtx.Database.MigrateAsync();
+
+    var myFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<ScryJobDbContext>>();
+    await using var myCtx = await myFactory.CreateDbContextAsync();
+    await myCtx.Database.MigrateAsync();
 }
 
 app.UseStaticFiles();
@@ -127,9 +123,10 @@ app.MapGet("/auth/logout", async (HttpContext ctx) =>
 }).AllowAnonymous();
 
 // ─── Demo seed ────────────────────────────────────────────────────────────────
-app.MapPost("/api/demo/seed", async (IDbContextFactory<ScryDbContext> factory) =>
+app.MapPost("/api/demo/seed", async (IDbContextFactory<ScryDbContext> factory, IJobQueue jobQueue) =>
 {
     await using var ctx = await factory.CreateDbContextAsync();
+    var initialJobs = new List<Job>();
 
     // Idempotent — skip if demo workspaces already exist.
     if (await ctx.Workspaces.AnyAsync(w => w.Name == "Work Demo" || w.Name == "Personal"))
@@ -166,7 +163,7 @@ app.MapPost("/api/demo/seed", async (IDbContextFactory<ScryDbContext> factory) =
             Interval = TimeSpan.FromMinutes(5),
         };
         ctx.Probes.Add(probe);
-        ctx.Jobs.Add(ScryProbesExtensions.CreateInitialProbeJob(probe));
+        initialJobs.Add(ScryProbesExtensions.CreateInitialProbeJob(probe));
     }
 
     // ── Work Demo workspace ───────────────────────────────────────────────────
@@ -213,7 +210,7 @@ app.MapPost("/api/demo/seed", async (IDbContextFactory<ScryDbContext> factory) =
             Interval = TimeSpan.FromMinutes(5),
         };
         ctx.Probes.Add(probe);
-        ctx.Jobs.Add(ScryProbesExtensions.CreateInitialProbeJob(probe));
+        initialJobs.Add(ScryProbesExtensions.CreateInitialProbeJob(probe));
     }
 
     // ── Alert rules for Work Demo ─────────────────────────────────────────────
@@ -240,6 +237,11 @@ app.MapPost("/api/demo/seed", async (IDbContextFactory<ScryDbContext> factory) =
     });
 
     await ctx.SaveChangesAsync();
+
+    foreach (var j in initialJobs)
+    {
+        await jobQueue.EnqueueAsync(j);
+    }
 
     return Results.Ok(new
     {
