@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Scry.Core;
 using Scry.Probes.Alerts;
+using Scry.Probes.Azure;
 using Scry.Probes.Executors;
 using Scry.Runner;
 
@@ -14,12 +15,17 @@ public static class ScryProbesExtensions
     // Requires IJobQueue and AddScryRunner to already be registered.
     public static IServiceCollection AddScryProbes(this IServiceCollection services)
     {
+        // Azure credential provider is a singleton — one credential object shared across all probes.
+        services.AddSingleton<AzureCredentialProvider>();
+
         // Executors are scoped (per-job) so they can safely inject scoped services in future iterations.
         services.AddScoped<IProbeExecutor, HttpProbeExecutor>();
         services.AddScoped<IProbeExecutor, JsonHttpProbeExecutor>();
         services.AddScoped<IProbeExecutor, TcpProbeExecutor>();
         services.AddScoped<IProbeExecutor, DnsProbeExecutor>();
         services.AddScoped<IProbeExecutor, TlsProbeExecutor>();
+        services.AddScoped<IProbeExecutor, AzureMetricProbeExecutor>();
+        services.AddScoped<IProbeExecutor, SqlKpiProbeExecutor>();
 
         // Alert evaluation and notifiers.
         services.AddScoped<AlertEvaluator>();

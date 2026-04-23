@@ -1,0 +1,160 @@
+@page "/workspaces/{WorkspaceId:guid}/alerts"
+@attribute [Authorize]
+@inject IDbContextFactory<ScryDbContext> DbFactory
+
+<PageTitle>Alerts — Scry</PageTitle>
+
+<div class="d-flex align-items-center mb-4">
+    <div>
+        <h1 class="page-title">Alerts</h1>
+        <p class="page-subtitle mb-0">@rules.Count rule(s) · @firingCount firing</p>
+    </div>
+</div>
+
+<!-- Firing events -->
+@if (firingEvents.Count > 0)
+{
+    <div class="scry-card mb-4" style="border-color:#dc3545;">
+        <div class="scry-card-header text-danger"><i class="bi bi-bell-fill me-2"></i>Firing alerts</div>
+        <table class="table scry-table mb-0">
+            <thead>
+                <tr>
+                    <th>Alert rule</th>
+                    <th>Severity</th>
+                    <th>Probe</th>
+                    <th>Summary</th>
+                    <th>Opened</th>
+                    <th>Last notified</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var evt in firingEvents)
+                {
+                    <tr>
+                        <td class="text-white fw-medium">@(ruleMap.GetValueOrDefault(evt.AlertRuleId)?.Name ?? evt.AlertRuleId.ToString())</td>
+                        <td><span class="badge @SeverityBadge(evt.Severity)">@evt.Severity</span></td>
+                        <td class="text-muted font-mono small">@evt.Fingerprint.Split(':').LastOrDefault()</td>
+                        <td class="text-muted small">@evt.Summary</td>
+                        <td class="text-muted">@Ago(evt.OpenedAt)</td>
+                        <td class="text-muted">@(evt.LastNotifiedAt.HasValue ? Ago(evt.LastNotifiedAt.Value) : "—")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+<!-- Alert rules -->
+<div class="scry-card">
+    <div class="scry-card-header"><i class="bi bi-sliders me-2"></i>Rules</div>
+    @if (rules.Count == 0)
+    {
+        <div class="p-4 text-center text-muted">
+            <i class="bi bi-sliders fs-2 d-block mb-2"></i>
+            <p>No alert rules yet.</p>
+            <code class="font-mono">POST /api/workspaces/@WorkspaceId/alerts</code>
+        </div>
+    }
+    else
+    {
+        <table class="table scry-table mb-0">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Expression</th>
+                    <th>Severity</th>
+                    <th>Notifier</th>
+                    <th>Probe filter</th>
+                    <th>Enabled</th>
+                    <th>Active events</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var rule in rules)
+                {
+                    var activeCount = firingEvents.Count(e => e.AlertRuleId == rule.Id);
+                    <tr>
+                        <td class="fw-medium text-white">@rule.Name</td>
+                        <td><code class="font-mono text-info">@rule.Expression</code></td>
+                        <td><span class="badge @SeverityBadge(rule.Severity)">@rule.Severity</span></td>
+                        <td class="text-muted small">@NotifierKind(rule.NotifierConfig)</td>
+                        <td class="text-muted small">@(rule.ProbeIdFilter.HasValue ? rule.ProbeIdFilter.Value.ToString()[..8] + "…" : "All probes")</td>
+                        <td>
+                            @if (rule.Enabled)
+                            {
+                                <span class="badge bg-success bg-opacity-25 text-success">Active</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary bg-opacity-25 text-secondary">Disabled</span>
+                            }
+                        </td>
+                        <td>
+                            @if (activeCount > 0)
+                            {
+                                <span class="badge badge-crit">@activeCount firing</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted">—</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid WorkspaceId { get; set; }
+
+    private List<AlertRule> rules = [];
+    private Dictionary<Guid, AlertRule> ruleMap = [];
+    private List<AlertEvent> firingEvents = [];
+    private int firingCount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var ctx = await DbFactory.CreateDbContextAsync();
+        ctx.CurrentWorkspaceId = WorkspaceId;
+
+        rules = await ctx.AlertRules.OrderBy(r => r.Name).ToListAsync();
+        ruleMap = rules.ToDictionary(r => r.Id);
+
+        firingEvents = await ctx.AlertEvents
+            .Where(e => e.State == AlertState.Firing)
+            .OrderByDescending(e => e.OpenedAt)
+            .ToListAsync();
+
+        firingCount = firingEvents.Count;
+    }
+
+    private static string SeverityBadge(AlertSeverity s) => s switch
+    {
+        AlertSeverity.Critical => "badge-crit",
+        AlertSeverity.Error    => "badge-crit",
+        AlertSeverity.Warning  => "badge-warn",
+        _                      => "badge-unknown",
+    };
+
+    private static string NotifierKind(string? config)
+    {
+        if (string.IsNullOrWhiteSpace(config)) return "—";
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(config);
+            return doc.RootElement.TryGetProperty("kind", out var k) ? k.GetString() ?? "webhook" : "webhook";
+        }
+        catch { return "webhook"; }
+    }
+
+    private static string Ago(DateTimeOffset t)
+    {
+        var diff = DateTimeOffset.UtcNow - t;
+        return diff.TotalMinutes < 1  ? $"{(int)diff.TotalSeconds}s ago"
+             : diff.TotalHours < 1    ? $"{(int)diff.TotalMinutes}m ago"
+             : diff.TotalDays < 1     ? $"{(int)diff.TotalHours}h ago"
+             : t.ToString("MMM d");
+    }
+}
