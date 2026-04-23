@@ -63,6 +63,7 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
     });
 
 builder.Services.AddAuthorization();
+builder.Services.AddCascadingAuthenticationState();
 
 // ─── Blazor ──────────────────────────────────────────────────────────────────
 builder.Services.AddRazorComponents()
