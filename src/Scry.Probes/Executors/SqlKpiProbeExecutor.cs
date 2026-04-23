@@ -58,10 +58,19 @@ internal sealed class SqlKpiProbeExecutor : IProbeExecutor
                     $"{label}: query returned no rows");
             }
 
-            // DateTime result — check age
-            if (scalar is DateTime dt || (scalar is string s && DateTime.TryParse(s, out dt)))
+            // DateTime/DateTimeOffset result — check age
+            DateTimeOffset? resultTime = scalar switch
             {
-                var utc = DateTime.SpecifyKind(dt, DateTimeKind.Utc);
+                DateTimeOffset dto => dto.ToUniversalTime(),
+                DateTime dt when dt.Kind == DateTimeKind.Local => new DateTimeOffset(dt).ToUniversalTime(),
+                DateTime dt => new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Utc)),
+                string s when DateTimeOffset.TryParse(s, out var parsed) => parsed.ToUniversalTime(),
+                _ => null,
+            };
+
+            if (resultTime is not null)
+            {
+                var utc = resultTime.Value;
                 var ageMinutes = (DateTimeOffset.UtcNow - utc).TotalMinutes;
                 var attrs = new Dictionary<string, string>
                 {

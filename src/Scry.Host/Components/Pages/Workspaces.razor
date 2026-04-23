@@ -65,24 +65,28 @@ else
         await using var ctx = await DbFactory.CreateDbContextAsync();
         workspaces = await ctx.Workspaces.OrderBy(w => w.Name).ToListAsync();
 
-        // Load latest result per probe for status counts
-        foreach (var ws in workspaces)
-        {
-            ctx.CurrentWorkspaceId = ws.Id;
-            var latest = await ctx.ProbeResults
-                .GroupBy(r => r.ProbeId)
-                .Select(g => g.OrderByDescending(r => r.CompletedAt).First())
-                .ToListAsync();
+        var workspaceIds = workspaces.Select(w => w.Id).ToHashSet();
 
-            statusCounts[ws.Id] = new StatusCount
-            {
-                Ok    = latest.Count(r => r.Outcome == ProbeOutcome.Ok),
-                Warn  = latest.Count(r => r.Outcome == ProbeOutcome.Warn),
-                Crit  = latest.Count(r => r.Outcome == ProbeOutcome.Crit),
-                Error = latest.Count(r => r.Outcome == ProbeOutcome.Error),
-                Total = latest.Count,
-            };
-        }
+        // Single query across all workspaces — bypass the per-context workspace filter.
+        var latestResults = await ctx.ProbeResults
+            .IgnoreQueryFilters()
+            .Where(r => workspaceIds.Contains(r.WorkspaceId))
+            .GroupBy(r => r.ProbeId)
+            .Select(g => g.OrderByDescending(r => r.CompletedAt).First())
+            .ToListAsync();
+
+        statusCounts = latestResults
+            .GroupBy(r => r.WorkspaceId)
+            .ToDictionary(
+                g => g.Key,
+                g => new StatusCount
+                {
+                    Ok    = g.Count(r => r.Outcome == ProbeOutcome.Ok),
+                    Warn  = g.Count(r => r.Outcome == ProbeOutcome.Warn),
+                    Crit  = g.Count(r => r.Outcome == ProbeOutcome.Crit),
+                    Error = g.Count(r => r.Outcome == ProbeOutcome.Error),
+                    Total = g.Count(),
+                });
     }
 
     private sealed record StatusCount

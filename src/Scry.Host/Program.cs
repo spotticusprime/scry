@@ -117,7 +117,7 @@ app.MapPost("/auth/login", async (HttpContext ctx, IConfiguration config) =>
 
     var redirect = string.IsNullOrWhiteSpace(returnUrl) ? "/" : returnUrl;
     return Results.Redirect(redirect);
-}).AllowAnonymous().DisableAntiforgery(); // Form uses AntiforgeryToken component
+}).AllowAnonymous();
 
 app.MapGet("/auth/logout", async (HttpContext ctx) =>
 {
