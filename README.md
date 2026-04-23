@@ -54,7 +54,7 @@ All routes are under `/api`. Full reference: [docs/api.md](docs/api.md).
 | Kind | What it checks |
 |------|----------------|
 | `http` | HTTP/HTTPS endpoint — status code and optional body substring |
-| `json_http` | HTTP endpoint — status code and a value at a JSON path |
+| `http_json` | HTTP endpoint — status code and a value at a JSON path |
 | `tcp` | TCP port reachability |
 | `dns` | DNS resolution, optional expected address |
 | `tls` | TLS certificate validity and days-to-expiry |
@@ -108,7 +108,7 @@ src/
   Scry.Core/        Domain models (Probe, ProbeResult, AlertRule, AlertEvent, …)
   Scry.Data/        EF Core DbContext, migrations, configurations
   Scry.Runner/      Background job queue and dispatcher
-  Scry.Probes/      Probe executors (http, tcp, dns, tls, json_http) and alert evaluation
+  Scry.Probes/      Probe executors (http, tcp, dns, tls, http_json) and alert evaluation
   Scry.Api/         Minimal API endpoint definitions
   Scry.Host/        Entry point — wires everything together, runs migrations
 tests/

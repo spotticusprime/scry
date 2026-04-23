@@ -141,7 +141,7 @@ Create a probe and seed its first job run.
 | Field | Type | Required | Default | Notes |
 |-------|------|----------|---------|-------|
 | `name` | string | yes | — | Display name |
-| `kind` | string | yes | — | `http`, `json_http`, `tcp`, `dns`, `tls` — see [probe docs](probes.md) |
+| `kind` | string | yes | — | `http`, `http_json`, `tcp`, `dns`, `tls` — see [probe docs](probes.md) |
 | `definition` | string | yes | — | YAML config for the probe kind |
 | `interval` | TimeSpan | no | `00:05:00` | How often to run, e.g. `00:01:00` |
 

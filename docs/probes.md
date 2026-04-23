@@ -37,7 +37,7 @@ headers:
 
 ---
 
-## `json_http`
+## `http_json`
 
 Like `http` but additionally extracts a value from the JSON response body using a dot-notation path and compares it to an expected value.
 
