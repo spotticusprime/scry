@@ -28,7 +28,7 @@ internal static class ProbeEndpoints
             return p is null ? Results.NotFound() : Results.Ok(ToDto(p));
         });
 
-        group.MapPost("/", async (Guid workspaceId, CreateProbeRequest req, ScryDbContext ctx, IJobQueue queue) =>
+        group.MapPost("/", async (Guid workspaceId, CreateProbeRequest req, ScryDbContext ctx) =>
         {
             var probe = new Probe
             {
@@ -53,8 +53,8 @@ internal static class ProbeEndpoints
             {
                 return Results.NotFound();
             }
-            p.Name = req.Name;
-            p.Definition = req.Definition;
+            p.Name = req.Name ?? p.Name;
+            p.Definition = req.Definition ?? p.Definition;
             p.Interval = req.Interval ?? p.Interval;
             p.Enabled = req.Enabled ?? p.Enabled;
             await ctx.SaveChangesAsync();
@@ -95,5 +95,5 @@ internal static class ProbeEndpoints
         string Name, string Kind, string Definition, TimeSpan? Interval);
 
     internal sealed record UpdateProbeRequest(
-        string Name, string Definition, TimeSpan? Interval, bool? Enabled);
+        string? Name, string? Definition, TimeSpan? Interval, bool? Enabled);
 }

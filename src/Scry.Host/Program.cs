@@ -7,12 +7,18 @@ using Scry.Runner;
 var builder = WebApplication.CreateBuilder(args);
 
 // ─── Data ────────────────────────────────────────────────────────────────────
-var dbPath = builder.Configuration["Scry:DatabasePath"]
-    ?? Path.Combine(
+var configuredPath = builder.Configuration["Scry:DatabasePath"];
+var dbPath = string.IsNullOrWhiteSpace(configuredPath)
+    ? Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "scry", "scry.db");
+        "scry", "scry.db")
+    : Path.GetFullPath(configuredPath);
 
-Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
+var dbDir = Path.GetDirectoryName(dbPath);
+if (!string.IsNullOrEmpty(dbDir))
+{
+    Directory.CreateDirectory(dbDir);
+}
 
 builder.Services.AddDbContextFactory<ScryDbContext>(opt =>
     opt.UseSqlite($"Data Source={dbPath}"));

@@ -29,13 +29,17 @@ internal static class AlertRuleEndpoints
 
         group.MapPost("/", async (Guid workspaceId, CreateAlertRuleRequest req, ScryDbContext ctx) =>
         {
+            if (!Enum.TryParse<AlertSeverity>(req.Severity, ignoreCase: true, out var severity))
+            {
+                return Results.BadRequest($"Invalid severity '{req.Severity}'. Valid values: {string.Join(", ", Enum.GetNames<AlertSeverity>())}");
+            }
             var rule = new AlertRule
             {
                 WorkspaceId = workspaceId,
                 Name = req.Name,
                 // Phase 1 expression: comma-separated ProbeOutcome names, e.g. "Warn,Crit"
                 Expression = req.Expression,
-                Severity = Enum.Parse<AlertSeverity>(req.Severity, ignoreCase: true),
+                Severity = severity,
                 ProbeIdFilter = req.ProbeIdFilter,
                 NotifierConfig = req.NotifierConfig,
             };
@@ -58,7 +62,11 @@ internal static class AlertRuleEndpoints
             rule.NotifierConfig = req.NotifierConfig ?? rule.NotifierConfig;
             if (req.Severity is not null)
             {
-                rule.Severity = Enum.Parse<AlertSeverity>(req.Severity, ignoreCase: true);
+                if (!Enum.TryParse<AlertSeverity>(req.Severity, ignoreCase: true, out var severity))
+                {
+                    return Results.BadRequest($"Invalid severity '{req.Severity}'. Valid values: {string.Join(", ", Enum.GetNames<AlertSeverity>())}");
+                }
+                rule.Severity = severity;
             }
             await ctx.SaveChangesAsync();
             return Results.Ok(ToDto(rule));

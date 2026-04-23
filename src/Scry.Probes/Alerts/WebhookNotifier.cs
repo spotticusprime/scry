@@ -2,15 +2,16 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Scry.Core;
-using Scry.Probes.Internal;
 
 namespace Scry.Probes.Alerts;
 
 internal sealed class WebhookNotifier : IAlertNotifier
 {
+    // Outbound payload uses camelCase; inbound NotifierConfig uses explicit [JsonPropertyName] attributes.
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true,
     };
 
     private readonly IHttpClientFactory _httpClientFactory;
@@ -31,7 +32,8 @@ internal sealed class WebhookNotifier : IAlertNotifier
             return;
         }
 
-        var config = YamlConfig.Deserialize<WebhookNotifierConfig>(rule.NotifierConfig);
+        var config = JsonSerializer.Deserialize<WebhookNotifierConfig>(rule.NotifierConfig, JsonOptions)
+            ?? throw new InvalidOperationException($"Alert rule {rule.Id} has null NotifierConfig after deserialization.");
         using var http = _httpClientFactory.CreateClient("scry.alerts");
         using var request = new HttpRequestMessage(new HttpMethod(config.Method), config.Url);
 

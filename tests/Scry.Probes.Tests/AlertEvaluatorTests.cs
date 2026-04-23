@@ -1,5 +1,5 @@
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Scry.Core;
 using Scry.Data;
@@ -7,33 +7,36 @@ using Scry.Probes.Alerts;
 
 namespace Scry.Probes.Tests;
 
-public class AlertEvaluatorTests
+public class AlertEvaluatorTests : IDisposable
 {
-    private static readonly Guid WsId = Guid.NewGuid();
+    // Hold the connection open so the :memory: database persists across context instances.
+    private readonly SqliteConnection _connection;
+    private readonly IDbContextFactory<ScryDbContext> _factory;
+    private readonly Guid _wsId = Guid.NewGuid();
 
-    private static async Task<IDbContextFactory<ScryDbContext>> CreateFactoryAsync()
+    public AlertEvaluatorTests()
     {
-        var sp = new ServiceCollection()
-            .AddDbContextFactory<ScryDbContext>(opt =>
-                opt.UseSqlite($"Data Source=file:{Guid.NewGuid()}?mode=memory&cache=shared"))
-            .BuildServiceProvider();
-        var factory = sp.GetRequiredService<IDbContextFactory<ScryDbContext>>();
-        await using var ctx = await factory.CreateDbContextAsync();
-        await ctx.Database.EnsureCreatedAsync();
+        _connection = new SqliteConnection("DataSource=:memory:");
+        _connection.Open();
+        var options = new DbContextOptionsBuilder<ScryDbContext>()
+            .UseSqlite(_connection)
+            .Options;
+        _factory = new FixtureDbContextFactory(options);
 
-        ctx.Workspaces.Add(new Workspace { Id = WsId, Name = "test" });
-        await ctx.SaveChangesAsync();
-        return factory;
+        using var ctx = new ScryDbContext(options);
+        ctx.Database.EnsureCreated();
+        ctx.Workspaces.Add(new Workspace { Id = _wsId, Name = "test" });
+        ctx.SaveChanges();
     }
 
-    private static AlertEvaluator MakeEvaluator(
-        IDbContextFactory<ScryDbContext> factory,
-        IEnumerable<IAlertNotifier>? notifiers = null)
-        => new(factory, notifiers ?? [], NullLogger<AlertEvaluator>.Instance);
+    public void Dispose() => _connection.Dispose();
 
-    private static ProbeResult MakeResult(Guid probeId, ProbeOutcome outcome) => new()
+    private AlertEvaluator MakeEvaluator(IEnumerable<IAlertNotifier>? notifiers = null)
+        => new(_factory, notifiers ?? [], NullLogger<AlertEvaluator>.Instance);
+
+    private ProbeResult MakeResult(Guid probeId, ProbeOutcome outcome) => new()
     {
-        WorkspaceId = WsId,
+        WorkspaceId = _wsId,
         ProbeId = probeId,
         Outcome = outcome,
         StartedAt = DateTimeOffset.UtcNow,
@@ -44,24 +47,19 @@ public class AlertEvaluatorTests
     [Fact]
     public async Task No_Rules_Does_Nothing()
     {
-        var factory = await CreateFactoryAsync();
-        var evaluator = MakeEvaluator(factory);
-
-        // Should not throw when there are no rules.
+        var evaluator = MakeEvaluator();
         await evaluator.EvaluateAsync(MakeResult(Guid.NewGuid(), ProbeOutcome.Crit), CancellationToken.None);
     }
 
     [Fact]
     public async Task Creates_AlertEvent_When_Condition_Matches()
     {
-        var factory = await CreateFactoryAsync();
         var probeId = Guid.NewGuid();
-
-        await using (var ctx = await factory.CreateDbContextAsync())
+        await using (var ctx = await _factory.CreateDbContextAsync())
         {
             ctx.AlertRules.Add(new AlertRule
             {
-                WorkspaceId = WsId,
+                WorkspaceId = _wsId,
                 Name = "crit-rule",
                 Expression = "Crit",
                 Severity = AlertSeverity.Critical,
@@ -69,10 +67,9 @@ public class AlertEvaluatorTests
             await ctx.SaveChangesAsync();
         }
 
-        var evaluator = MakeEvaluator(factory);
-        await evaluator.EvaluateAsync(MakeResult(probeId, ProbeOutcome.Crit), CancellationToken.None);
+        await MakeEvaluator().EvaluateAsync(MakeResult(probeId, ProbeOutcome.Crit), CancellationToken.None);
 
-        await using var verify = await factory.CreateDbContextAsync();
+        await using var verify = await _factory.CreateDbContextAsync();
         var events = await verify.AlertEvents.IgnoreQueryFilters().ToListAsync();
         Assert.Single(events);
         Assert.Equal(AlertState.Firing, events[0].State);
@@ -82,14 +79,11 @@ public class AlertEvaluatorTests
     [Fact]
     public async Task Does_Not_Create_Event_When_Condition_Does_Not_Match()
     {
-        var factory = await CreateFactoryAsync();
-        var probeId = Guid.NewGuid();
-
-        await using (var ctx = await factory.CreateDbContextAsync())
+        await using (var ctx = await _factory.CreateDbContextAsync())
         {
             ctx.AlertRules.Add(new AlertRule
             {
-                WorkspaceId = WsId,
+                WorkspaceId = _wsId,
                 Name = "crit-only",
                 Expression = "Crit",
                 Severity = AlertSeverity.Critical,
@@ -97,25 +91,22 @@ public class AlertEvaluatorTests
             await ctx.SaveChangesAsync();
         }
 
-        var evaluator = MakeEvaluator(factory);
-        await evaluator.EvaluateAsync(MakeResult(probeId, ProbeOutcome.Ok), CancellationToken.None);
+        await MakeEvaluator().EvaluateAsync(MakeResult(Guid.NewGuid(), ProbeOutcome.Ok), CancellationToken.None);
 
-        await using var verify = await factory.CreateDbContextAsync();
+        await using var verify = await _factory.CreateDbContextAsync();
         Assert.Empty(await verify.AlertEvents.IgnoreQueryFilters().ToListAsync());
     }
 
     [Fact]
     public async Task Resolves_Firing_Event_When_Condition_Clears()
     {
-        var factory = await CreateFactoryAsync();
         var probeId = Guid.NewGuid();
         Guid ruleId;
-
-        await using (var ctx = await factory.CreateDbContextAsync())
+        await using (var ctx = await _factory.CreateDbContextAsync())
         {
             var rule = new AlertRule
             {
-                WorkspaceId = WsId,
+                WorkspaceId = _wsId,
                 Name = "crit-rule",
                 Expression = "Crit",
                 Severity = AlertSeverity.Warning,
@@ -124,7 +115,7 @@ public class AlertEvaluatorTests
             ruleId = rule.Id;
             ctx.AlertEvents.Add(new AlertEvent
             {
-                WorkspaceId = WsId,
+                WorkspaceId = _wsId,
                 AlertRuleId = ruleId,
                 Fingerprint = $"{ruleId}:{probeId}",
                 State = AlertState.Firing,
@@ -133,10 +124,9 @@ public class AlertEvaluatorTests
             await ctx.SaveChangesAsync();
         }
 
-        var evaluator = MakeEvaluator(factory);
-        await evaluator.EvaluateAsync(MakeResult(probeId, ProbeOutcome.Ok), CancellationToken.None);
+        await MakeEvaluator().EvaluateAsync(MakeResult(probeId, ProbeOutcome.Ok), CancellationToken.None);
 
-        await using var verify = await factory.CreateDbContextAsync();
+        await using var verify = await _factory.CreateDbContextAsync();
         var evt = await verify.AlertEvents.IgnoreQueryFilters().SingleAsync();
         Assert.Equal(AlertState.Resolved, evt.State);
         Assert.NotNull(evt.ResolvedAt);
@@ -145,15 +135,13 @@ public class AlertEvaluatorTests
     [Fact]
     public async Task ProbeIdFilter_Scopes_Rule_To_One_Probe()
     {
-        var factory = await CreateFactoryAsync();
         var targetProbe = Guid.NewGuid();
         var otherProbe = Guid.NewGuid();
-
-        await using (var ctx = await factory.CreateDbContextAsync())
+        await using (var ctx = await _factory.CreateDbContextAsync())
         {
             ctx.AlertRules.Add(new AlertRule
             {
-                WorkspaceId = WsId,
+                WorkspaceId = _wsId,
                 Name = "scoped-rule",
                 Expression = "Crit",
                 Severity = AlertSeverity.Critical,
@@ -162,27 +150,21 @@ public class AlertEvaluatorTests
             await ctx.SaveChangesAsync();
         }
 
-        var evaluator = MakeEvaluator(factory);
-        // Other probe fires Crit — rule should NOT trigger.
-        await evaluator.EvaluateAsync(MakeResult(otherProbe, ProbeOutcome.Crit), CancellationToken.None);
+        await MakeEvaluator().EvaluateAsync(MakeResult(otherProbe, ProbeOutcome.Crit), CancellationToken.None);
 
-        await using var verify = await factory.CreateDbContextAsync();
+        await using var verify = await _factory.CreateDbContextAsync();
         Assert.Empty(await verify.AlertEvents.IgnoreQueryFilters().ToListAsync());
     }
 
     [Fact]
     public async Task Calls_Notifier_When_Alert_Fires()
     {
-        var factory = await CreateFactoryAsync();
         var notified = new List<(AlertRule, AlertEvent, ProbeResult)>();
-
-        var fakeNotifier = new FakeNotifier(notified);
-
-        await using (var ctx = await factory.CreateDbContextAsync())
+        await using (var ctx = await _factory.CreateDbContextAsync())
         {
             ctx.AlertRules.Add(new AlertRule
             {
-                WorkspaceId = WsId,
+                WorkspaceId = _wsId,
                 Name = "notify-rule",
                 Expression = "Warn,Crit",
                 Severity = AlertSeverity.Warning,
@@ -191,8 +173,8 @@ public class AlertEvaluatorTests
             await ctx.SaveChangesAsync();
         }
 
-        var evaluator = MakeEvaluator(factory, [fakeNotifier]);
-        await evaluator.EvaluateAsync(MakeResult(Guid.NewGuid(), ProbeOutcome.Warn), CancellationToken.None);
+        await MakeEvaluator([new FakeNotifier(notified)])
+            .EvaluateAsync(MakeResult(Guid.NewGuid(), ProbeOutcome.Warn), CancellationToken.None);
 
         Assert.Single(notified);
     }
@@ -206,5 +188,14 @@ public class AlertEvaluatorTests
             log.Add((rule, evt, result));
             return Task.CompletedTask;
         }
+    }
+
+    // Thin factory wrapper that reuses a single shared connection.
+    private sealed class FixtureDbContextFactory(DbContextOptions<ScryDbContext> options)
+        : IDbContextFactory<ScryDbContext>
+    {
+        public ScryDbContext CreateDbContext() => new(options);
+        public Task<ScryDbContext> CreateDbContextAsync(CancellationToken ct = default)
+            => Task.FromResult(new ScryDbContext(options));
     }
 }

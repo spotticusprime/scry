@@ -43,18 +43,21 @@ internal sealed class AlertEvaluator
         var outcomeStr = result.Outcome.ToString();
         var now = DateTimeOffset.UtcNow;
 
+        // Load all open alert events for these rules in one query to avoid N+1.
+        var fingerprints = rules.Select(r => $"{r.Id}:{result.ProbeId}").ToList();
+        var openEvents = await ctx.AlertEvents
+            .IgnoreQueryFilters()
+            .Where(e => e.WorkspaceId == result.WorkspaceId
+                     && fingerprints.Contains(e.Fingerprint)
+                     && e.State != AlertState.Resolved)
+            .ToListAsync(ct);
+        var eventsByFingerprint = openEvents.ToDictionary(e => e.Fingerprint);
+
         foreach (var rule in rules)
         {
             var conditionMet = IsConditionMet(rule.Expression, outcomeStr);
             var fingerprint = $"{rule.Id}:{result.ProbeId}";
-
-            var existing = await ctx.AlertEvents
-                .IgnoreQueryFilters()
-                .Where(e => e.WorkspaceId == result.WorkspaceId
-                         && e.AlertRuleId == rule.Id
-                         && e.Fingerprint == fingerprint
-                         && e.State != AlertState.Resolved)
-                .FirstOrDefaultAsync(ct);
+            eventsByFingerprint.TryGetValue(fingerprint, out var existing);
 
             if (conditionMet)
             {
@@ -126,7 +129,10 @@ internal sealed class AlertEvaluator
                 kind = kindEl.GetString() ?? "webhook";
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to parse NotifierConfig for alert {AlertName}; defaulting to webhook", rule.Name);
+        }
 
         if (!_notifiers.TryGetValue(kind, out var notifier))
         {
