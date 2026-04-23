@@ -1,0 +1,138 @@
+@page "/workspaces/{WorkspaceId:guid}/probes"
+@attribute [Authorize]
+@inject IDbContextFactory<ScryDbContext> DbFactory
+
+<PageTitle>Probes — Scry</PageTitle>
+
+<div class="d-flex align-items-center justify-content-between mb-4">
+    <div>
+        <h1 class="page-title">Probes</h1>
+        <p class="page-subtitle mb-0">@probes.Count probe(s) in this workspace</p>
+    </div>
+</div>
+
+<div class="scry-card">
+    <div class="scry-card-header"><i class="bi bi-broadcast me-2"></i>All probes</div>
+    @if (probes.Count == 0)
+    {
+        <div class="p-4 text-center text-muted">
+            <i class="bi bi-broadcast fs-2 d-block mb-2"></i>
+            <p>No probes yet.</p>
+            <code class="font-mono">POST /api/workspaces/@WorkspaceId/probes</code>
+        </div>
+    }
+    else
+    {
+        <table class="table scry-table mb-0">
+            <thead>
+                <tr>
+                    <th style="width:14px"></th>
+                    <th>Name</th>
+                    <th>Kind</th>
+                    <th>Interval</th>
+                    <th>Status</th>
+                    <th>Last message</th>
+                    <th>Last run</th>
+                    <th>Enabled</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in probes)
+                {
+                    <tr>
+                        <td><span class="dot @DotClass(row.Outcome)"></span></td>
+                        <td>
+                            <a href="/workspaces/@WorkspaceId/probes/@row.Probe.Id"
+                               class="text-white text-decoration-none fw-medium">@row.Probe.Name</a>
+                        </td>
+                        <td><span class="font-mono text-muted">@row.Probe.Kind</span></td>
+                        <td class="text-muted">@row.Probe.Interval</td>
+                        <td>
+                            @if (row.Outcome.HasValue)
+                            {
+                                <span class="badge @BadgeClass(row.Outcome.Value)">@row.Outcome</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted">—</span>
+                            }
+                        </td>
+                        <td class="text-muted" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                            @row.Message
+                        </td>
+                        <td class="text-muted">@Ago(row.CompletedAt)</td>
+                        <td>
+                            @if (row.Probe.Enabled)
+                            {
+                                <span class="badge bg-success bg-opacity-25 text-success">Active</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary bg-opacity-25 text-secondary">Paused</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid WorkspaceId { get; set; }
+
+    private List<ProbeRow> probes = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var ctx = await DbFactory.CreateDbContextAsync();
+        ctx.CurrentWorkspaceId = WorkspaceId;
+
+        var allProbes = await ctx.Probes.OrderBy(p => p.Name).ToListAsync();
+
+        var latestResults = await ctx.ProbeResults
+            .GroupBy(r => r.ProbeId)
+            .Select(g => g.OrderByDescending(r => r.CompletedAt).First())
+            .ToListAsync();
+
+        var resultMap = latestResults.ToDictionary(r => r.ProbeId);
+
+        probes = allProbes.Select(p =>
+        {
+            resultMap.TryGetValue(p.Id, out var result);
+            return new ProbeRow(p, result?.Outcome, result?.Message, result?.CompletedAt);
+        }).ToList();
+    }
+
+    private static string DotClass(ProbeOutcome? o) => o switch
+    {
+        ProbeOutcome.Ok    => "dot-ok",
+        ProbeOutcome.Warn  => "dot-warn",
+        ProbeOutcome.Crit  => "dot-crit",
+        ProbeOutcome.Error => "dot-error",
+        _                  => "dot-unknown",
+    };
+
+    private static string BadgeClass(ProbeOutcome o) => o switch
+    {
+        ProbeOutcome.Ok    => "badge-ok",
+        ProbeOutcome.Warn  => "badge-warn",
+        ProbeOutcome.Crit  => "badge-crit",
+        ProbeOutcome.Error => "badge-error",
+        _                  => "badge-unknown",
+    };
+
+    private static string Ago(DateTimeOffset? t)
+    {
+        if (t is null) return "—";
+        var diff = DateTimeOffset.UtcNow - t.Value;
+        return diff.TotalMinutes < 1  ? $"{(int)diff.TotalSeconds}s ago"
+             : diff.TotalHours < 1    ? $"{(int)diff.TotalMinutes}m ago"
+             : diff.TotalDays < 1     ? $"{(int)diff.TotalHours}h ago"
+             : t.Value.ToString("MMM d");
+    }
+
+    private sealed record ProbeRow(
+        Probe Probe, ProbeOutcome? Outcome,
+        string? Message, DateTimeOffset? CompletedAt);
+}

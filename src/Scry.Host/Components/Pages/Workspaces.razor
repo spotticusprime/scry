@@ -1,0 +1,92 @@
+@page "/"
+@page "/workspaces"
+@attribute [Authorize]
+@inject IDbContextFactory<ScryDbContext> DbFactory
+@inject NavigationManager Nav
+
+<PageTitle>Workspaces — Scry</PageTitle>
+
+<div class="d-flex align-items-center mb-4">
+    <div>
+        <h1 class="page-title">Workspaces</h1>
+        <p class="page-subtitle mb-0">Select a workspace to view its dashboard</p>
+    </div>
+</div>
+
+@if (workspaces.Count == 0)
+{
+    <div class="scry-card p-4 text-center text-muted">
+        <i class="bi bi-diagram-3 fs-1 mb-3 d-block"></i>
+        <p>No workspaces yet. Create one via the API:</p>
+        <code class="font-mono">POST /api/workspaces</code>
+    </div>
+}
+else
+{
+    <div class="row g-3">
+        @foreach (var ws in workspaces)
+        {
+            var counts = statusCounts.GetValueOrDefault(ws.Id);
+            <div class="col-md-6 col-lg-4">
+                <a href="/workspaces/@ws.Id" class="text-decoration-none">
+                    <div class="scry-card p-3 h-100" style="transition: border-color 0.15s; cursor:pointer;"
+                         onmouseover="this.style.borderColor='#0d6efd'" onmouseout="this.style.borderColor='#2d3039'">
+                        <div class="d-flex align-items-center mb-3">
+                            <i class="bi bi-diagram-3-fill text-primary me-2"></i>
+                            <span class="fw-semibold text-white">@ws.Name</span>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(ws.Description))
+                        {
+                            <p class="text-muted small mb-3">@ws.Description</p>
+                        }
+                        @if (counts is not null)
+                        {
+                            <div class="d-flex gap-2 flex-wrap">
+                                @if (counts.Ok > 0)    { <span class="badge badge-ok">@counts.Ok Ok</span> }
+                                @if (counts.Warn > 0)  { <span class="badge badge-warn">@counts.Warn Warn</span> }
+                                @if (counts.Crit > 0)  { <span class="badge badge-crit">@counts.Crit Crit</span> }
+                                @if (counts.Error > 0) { <span class="badge badge-error">@counts.Error Error</span> }
+                                @if (counts.Total == 0){ <span class="text-muted small">No probes</span> }
+                            </div>
+                        }
+                    </div>
+                </a>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private List<Workspace> workspaces = [];
+    private Dictionary<Guid, StatusCount> statusCounts = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var ctx = await DbFactory.CreateDbContextAsync();
+        workspaces = await ctx.Workspaces.OrderBy(w => w.Name).ToListAsync();
+
+        // Load latest result per probe for status counts
+        foreach (var ws in workspaces)
+        {
+            ctx.CurrentWorkspaceId = ws.Id;
+            var latest = await ctx.ProbeResults
+                .GroupBy(r => r.ProbeId)
+                .Select(g => g.OrderByDescending(r => r.CompletedAt).First())
+                .ToListAsync();
+
+            statusCounts[ws.Id] = new StatusCount
+            {
+                Ok    = latest.Count(r => r.Outcome == ProbeOutcome.Ok),
+                Warn  = latest.Count(r => r.Outcome == ProbeOutcome.Warn),
+                Crit  = latest.Count(r => r.Outcome == ProbeOutcome.Crit),
+                Error = latest.Count(r => r.Outcome == ProbeOutcome.Error),
+                Total = latest.Count,
+            };
+        }
+    }
+
+    private sealed record StatusCount
+    {
+        public int Ok, Warn, Crit, Error, Total;
+    }
+}

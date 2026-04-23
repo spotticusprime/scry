@@ -1,0 +1,178 @@
+:root {
+    --sidebar-width: 220px;
+    --sidebar-bg: #1a1d23;
+    --sidebar-border: #2d3039;
+}
+
+html, body {
+    background-color: #111318;
+    color: #e0e0e0;
+}
+
+/* Sidebar */
+.sidebar {
+    width: var(--sidebar-width);
+    min-width: var(--sidebar-width);
+    background: var(--sidebar-bg);
+    border-right: 1px solid var(--sidebar-border);
+}
+
+.sidebar-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #6c757d;
+    margin-bottom: 4px;
+    display: block;
+}
+
+.workspace-select {
+    background-color: #2d3039;
+    border-color: #3d4252;
+    color: #e0e0e0;
+    font-size: 0.85rem;
+}
+
+.workspace-select:focus {
+    background-color: #2d3039;
+    border-color: #0d6efd;
+    color: #e0e0e0;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+
+.nav-pills .nav-link {
+    color: #9ca3af;
+    font-size: 0.875rem;
+    border-radius: 6px;
+    padding: 6px 10px;
+}
+
+.nav-pills .nav-link:hover {
+    color: #e0e0e0;
+    background-color: #2d3039;
+}
+
+.nav-pills .nav-link.active {
+    color: #fff;
+    background-color: #0d6efd;
+}
+
+/* Cards */
+.scry-card {
+    background: #1e2128;
+    border: 1px solid #2d3039;
+    border-radius: 8px;
+}
+
+.scry-card-header {
+    background: transparent;
+    border-bottom: 1px solid #2d3039;
+    padding: 12px 16px;
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: #9ca3af;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* Status badges */
+.badge-ok      { background-color: #198754; color: #fff; }
+.badge-warn    { background-color: #fd7e14; color: #fff; }
+.badge-crit    { background-color: #dc3545; color: #fff; }
+.badge-error   { background-color: #6c757d; color: #fff; }
+.badge-unknown { background-color: #343a40; color: #adb5bd; }
+
+/* Status dot (inline indicator) */
+.dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.dot-ok      { background: #198754; box-shadow: 0 0 6px #19875480; }
+.dot-warn    { background: #fd7e14; box-shadow: 0 0 6px #fd7e1480; }
+.dot-crit    { background: #dc3545; box-shadow: 0 0 6px #dc354580; }
+.dot-error   { background: #6c757d; }
+.dot-unknown { background: #343a40; }
+
+/* Stat cards on dashboard */
+.stat-card {
+    background: #1e2128;
+    border: 1px solid #2d3039;
+    border-radius: 8px;
+    padding: 20px;
+    text-align: center;
+}
+
+.stat-card .stat-value {
+    font-size: 2.5rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.stat-card .stat-label {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #6c757d;
+    margin-top: 4px;
+}
+
+/* Tables */
+.scry-table {
+    color: #e0e0e0;
+    font-size: 0.875rem;
+}
+
+.scry-table thead th {
+    color: #6c757d;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-color: #2d3039;
+    font-weight: 500;
+}
+
+.scry-table tbody tr {
+    border-color: #2d3039;
+}
+
+.scry-table tbody tr:hover {
+    background-color: #2d3039;
+}
+
+.scry-table td {
+    border-color: #2d3039;
+    vertical-align: middle;
+}
+
+/* Login */
+.login-box {
+    max-width: 380px;
+    margin: 0 auto;
+    padding-top: 15vh;
+}
+
+/* Monospace for probe definitions */
+.font-mono {
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 0.8rem;
+}
+
+/* Page heading */
+.page-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #e0e0e0;
+    margin-bottom: 0;
+}
+
+.page-subtitle {
+    font-size: 0.8rem;
+    color: #6c757d;
+}
+
+.bg-dark-subtle {
+    background-color: #111318 !important;
+}

@@ -1,0 +1,166 @@
+@page "/workspaces/{WorkspaceId:guid}/probes/{ProbeId:guid}"
+@attribute [Authorize]
+@inject IDbContextFactory<ScryDbContext> DbFactory
+
+<PageTitle>@(probe?.Name ?? "Probe") — Scry</PageTitle>
+
+@if (probe is null)
+{
+    <p class="text-muted">Probe not found.</p>
+    return;
+}
+
+<div class="d-flex align-items-center mb-1">
+    <a href="/workspaces/@WorkspaceId/probes" class="text-muted text-decoration-none small me-2">
+        <i class="bi bi-arrow-left"></i> Probes
+    </a>
+</div>
+
+<div class="d-flex align-items-center justify-content-between mb-4">
+    <div class="d-flex align-items-center gap-3">
+        <span class="dot @DotClass(latestOutcome)" style="width:14px;height:14px;"></span>
+        <div>
+            <h1 class="page-title">@probe.Name</h1>
+            <p class="page-subtitle mb-0">@probe.Kind · every @probe.Interval
+                · @(probe.Enabled ? "Active" : "Paused")</p>
+        </div>
+    </div>
+    @if (latestOutcome.HasValue)
+    {
+        <span class="badge @BadgeClass(latestOutcome.Value) fs-6 px-3 py-2">@latestOutcome</span>
+    }
+</div>
+
+<div class="row g-3 mb-4">
+    <!-- Latest result -->
+    @if (results.Count > 0)
+    {
+        var latest = results[0];
+        <div class="col-md-4">
+            <div class="scry-card p-3">
+                <div class="sidebar-label">Latest message</div>
+                <p class="mb-0 small text-white">@latest.Message</p>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="scry-card p-3">
+                <div class="sidebar-label">Last run</div>
+                <p class="mb-0 small text-white">@latest.CompletedAt.ToString("yyyy-MM-dd HH:mm:ss") UTC</p>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="scry-card p-3">
+                <div class="sidebar-label">Duration</div>
+                <p class="mb-0 small text-white">@latest.DurationMs ms</p>
+            </div>
+        </div>
+    }
+</div>
+
+<!-- Definition -->
+<div class="scry-card mb-3">
+    <div class="scry-card-header"><i class="bi bi-code me-2"></i>Definition (YAML)</div>
+    <pre class="p-3 mb-0 font-mono text-muted" style="font-size:0.8rem;white-space:pre-wrap;word-break:break-all;">@probe.Definition</pre>
+</div>
+
+<!-- Attributes from latest result -->
+@if (results.Count > 0 && results[0].Attributes.Count > 0)
+{
+    <div class="scry-card mb-3">
+        <div class="scry-card-header"><i class="bi bi-tags me-2"></i>Attributes (latest run)</div>
+        <div class="p-3">
+            <div class="row g-2">
+                @foreach (var (k, v) in results[0].Attributes)
+                {
+                    <div class="col-md-6">
+                        <div class="d-flex justify-content-between small">
+                            <span class="text-muted font-mono">@k</span>
+                            <span class="text-white font-mono">@v</span>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Result history -->
+<div class="scry-card">
+    <div class="scry-card-header"><i class="bi bi-clock-history me-2"></i>Result history (last 100)</div>
+    @if (results.Count == 0)
+    {
+        <div class="p-4 text-center text-muted">No results yet — probe has not run.</div>
+    }
+    else
+    {
+        <table class="table scry-table mb-0">
+            <thead>
+                <tr>
+                    <th style="width:14px"></th>
+                    <th>Outcome</th>
+                    <th>Message</th>
+                    <th>Completed</th>
+                    <th>Duration</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var r in results)
+                {
+                    <tr>
+                        <td><span class="dot @DotClass(r.Outcome)"></span></td>
+                        <td><span class="badge @BadgeClass(r.Outcome)">@r.Outcome</span></td>
+                        <td class="text-muted" style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                            @r.Message
+                        </td>
+                        <td class="text-muted">@r.CompletedAt.ToString("yyyy-MM-dd HH:mm:ss") UTC</td>
+                        <td class="text-muted">@r.DurationMs ms</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid WorkspaceId { get; set; }
+    [Parameter] public Guid ProbeId { get; set; }
+
+    private Probe? probe;
+    private List<ProbeResult> results = [];
+    private ProbeOutcome? latestOutcome;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var ctx = await DbFactory.CreateDbContextAsync();
+        ctx.CurrentWorkspaceId = WorkspaceId;
+
+        probe = await ctx.Probes.FirstOrDefaultAsync(p => p.Id == ProbeId);
+        if (probe is null) return;
+
+        results = await ctx.ProbeResults
+            .Where(r => r.ProbeId == ProbeId)
+            .OrderByDescending(r => r.CompletedAt)
+            .Take(100)
+            .ToListAsync();
+
+        latestOutcome = results.Count > 0 ? results[0].Outcome : null;
+    }
+
+    private static string DotClass(ProbeOutcome? o) => o switch
+    {
+        ProbeOutcome.Ok    => "dot-ok",
+        ProbeOutcome.Warn  => "dot-warn",
+        ProbeOutcome.Crit  => "dot-crit",
+        ProbeOutcome.Error => "dot-error",
+        _                  => "dot-unknown",
+    };
+
+    private static string BadgeClass(ProbeOutcome o) => o switch
+    {
+        ProbeOutcome.Ok    => "badge-ok",
+        ProbeOutcome.Warn  => "badge-warn",
+        ProbeOutcome.Crit  => "badge-crit",
+        ProbeOutcome.Error => "badge-error",
+        _                  => "badge-unknown",
+    };
+}

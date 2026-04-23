@@ -1,0 +1,194 @@
+@page "/workspaces/{WorkspaceId:guid}"
+@attribute [Authorize]
+@inject IDbContextFactory<ScryDbContext> DbFactory
+@inject NavigationManager Nav
+
+<PageTitle>Dashboard — Scry</PageTitle>
+
+@if (workspace is null)
+{
+    <p class="text-muted">Workspace not found.</p>
+    return;
+}
+
+<div class="d-flex align-items-center justify-content-between mb-4">
+    <div>
+        <h1 class="page-title">@workspace.Name</h1>
+        <p class="page-subtitle mb-0">Last refreshed @refreshed.ToString("HH:mm:ss") UTC
+            — <a href="/workspaces/@WorkspaceId" class="text-muted">Refresh</a></p>
+    </div>
+    @if (firingAlerts > 0)
+    {
+        <a href="/workspaces/@WorkspaceId/alerts" class="badge badge-crit text-decoration-none fs-6 px-3 py-2">
+            <i class="bi bi-bell-fill me-1"></i> @firingAlerts firing
+        </a>
+    }
+</div>
+
+<!-- Status summary -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <div class="stat-value text-success">@okCount</div>
+            <div class="stat-label">Healthy</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <div class="stat-value text-warning">@warnCount</div>
+            <div class="stat-label">Warning</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <div class="stat-value text-danger">@critCount</div>
+            <div class="stat-label">Critical</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <div class="stat-value text-secondary">@errorCount</div>
+            <div class="stat-label">Error</div>
+        </div>
+    </div>
+</div>
+
+<!-- Probe grid -->
+<div class="scry-card">
+    <div class="scry-card-header d-flex align-items-center justify-content-between">
+        <span><i class="bi bi-broadcast me-2"></i>Probes (@rows.Count)</span>
+        <a href="/workspaces/@WorkspaceId/probes" class="text-muted small text-decoration-none">View all →</a>
+    </div>
+    @if (rows.Count == 0)
+    {
+        <div class="p-4 text-center text-muted">
+            <i class="bi bi-broadcast fs-2 d-block mb-2"></i>
+            No probes yet — <a href="/workspaces/@WorkspaceId/probes">create one</a>
+        </div>
+    }
+    else
+    {
+        <table class="table scry-table mb-0">
+            <thead>
+                <tr>
+                    <th style="width:14px"></th>
+                    <th>Probe</th>
+                    <th>Kind</th>
+                    <th>Status</th>
+                    <th>Message</th>
+                    <th>Last run</th>
+                    <th>Duration</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in rows.OrderBy(r => r.Outcome).ThenBy(r => r.Name))
+                {
+                    <tr>
+                        <td><span class="dot @DotClass(row.Outcome)"></span></td>
+                        <td>
+                            <a href="/workspaces/@WorkspaceId/probes/@row.ProbeId"
+                               class="text-white text-decoration-none fw-medium">@row.Name</a>
+                        </td>
+                        <td><span class="text-muted font-mono">@row.Kind</span></td>
+                        <td><span class="badge @BadgeClass(row.Outcome)">@row.Outcome</span></td>
+                        <td class="text-muted" style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                            @row.Message
+                        </td>
+                        <td class="text-muted">@Ago(row.CompletedAt)</td>
+                        <td class="text-muted">@row.DurationMs ms</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid WorkspaceId { get; set; }
+
+    private Workspace? workspace;
+    private List<ProbeRow> rows = [];
+    private int okCount, warnCount, critCount, errorCount, firingAlerts;
+    private DateTimeOffset refreshed = DateTimeOffset.UtcNow;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var ctx = await DbFactory.CreateDbContextAsync();
+        workspace = await ctx.Workspaces.FindAsync(WorkspaceId);
+        if (workspace is null) return;
+
+        ctx.CurrentWorkspaceId = WorkspaceId;
+
+        var probes = await ctx.Probes.Where(p => p.Enabled).ToListAsync();
+        var probeMap = probes.ToDictionary(p => p.Id);
+
+        var latestResults = await ctx.ProbeResults
+            .GroupBy(r => r.ProbeId)
+            .Select(g => g.OrderByDescending(r => r.CompletedAt).First())
+            .ToListAsync();
+
+        rows = latestResults
+            .Where(r => probeMap.ContainsKey(r.ProbeId))
+            .Select(r => new ProbeRow(
+                r.ProbeId,
+                probeMap[r.ProbeId].Name,
+                probeMap[r.ProbeId].Kind,
+                r.Outcome,
+                r.Message ?? "",
+                r.CompletedAt,
+                r.DurationMs))
+            .ToList();
+
+        // Add probes with no results yet
+        var probedIds = rows.Select(r => r.ProbeId).ToHashSet();
+        foreach (var p in probes.Where(p => !probedIds.Contains(p.Id)))
+        {
+            rows.Add(new ProbeRow(p.Id, p.Name, p.Kind, ProbeOutcome.Unknown,
+                "No results yet", DateTimeOffset.MinValue, 0));
+        }
+
+        okCount    = rows.Count(r => r.Outcome == ProbeOutcome.Ok);
+        warnCount  = rows.Count(r => r.Outcome == ProbeOutcome.Warn);
+        critCount  = rows.Count(r => r.Outcome == ProbeOutcome.Crit);
+        errorCount = rows.Count(r => r.Outcome is ProbeOutcome.Error or ProbeOutcome.Unknown);
+
+        firingAlerts = await ctx.AlertEvents
+            .Where(e => e.State == AlertState.Firing)
+            .CountAsync();
+
+        refreshed = DateTimeOffset.UtcNow;
+    }
+
+    private static string DotClass(ProbeOutcome o) => o switch
+    {
+        ProbeOutcome.Ok      => "dot-ok",
+        ProbeOutcome.Warn    => "dot-warn",
+        ProbeOutcome.Crit    => "dot-crit",
+        ProbeOutcome.Error   => "dot-error",
+        _                    => "dot-unknown",
+    };
+
+    private static string BadgeClass(ProbeOutcome o) => o switch
+    {
+        ProbeOutcome.Ok      => "badge-ok",
+        ProbeOutcome.Warn    => "badge-warn",
+        ProbeOutcome.Crit    => "badge-crit",
+        ProbeOutcome.Error   => "badge-error",
+        _                    => "badge-unknown",
+    };
+
+    private static string Ago(DateTimeOffset t)
+    {
+        if (t == DateTimeOffset.MinValue) return "—";
+        var diff = DateTimeOffset.UtcNow - t;
+        return diff.TotalMinutes < 1   ? $"{(int)diff.TotalSeconds}s ago"
+             : diff.TotalHours < 1     ? $"{(int)diff.TotalMinutes}m ago"
+             : diff.TotalDays < 1      ? $"{(int)diff.TotalHours}h ago"
+             : t.ToString("MMM d");
+    }
+
+    private sealed record ProbeRow(
+        Guid ProbeId, string Name, string Kind,
+        ProbeOutcome Outcome, string Message,
+        DateTimeOffset CompletedAt, long DurationMs);
+}
