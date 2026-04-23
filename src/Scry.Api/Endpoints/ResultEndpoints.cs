@@ -57,9 +57,13 @@ internal static class ResultEndpoints
                     date_trunc('minute', "CompletedAt" AT TIME ZONE 'UTC') -
                         (EXTRACT(MINUTE FROM "CompletedAt" AT TIME ZONE 'UTC')::int % {{bucketMinutes}}) * interval '1 minute'
                         AS "Bucket",
-                    MODE() WITHIN GROUP (ORDER BY "Outcome") AS "Outcome",
-                    AVG("DurationMs") AS "AvgDurationMs",
-                    COUNT(*) AS "Count"
+                    COUNT(*) FILTER (WHERE "Outcome" = 'Ok')      AS "Ok",
+                    COUNT(*) FILTER (WHERE "Outcome" = 'Warn')    AS "Warn",
+                    COUNT(*) FILTER (WHERE "Outcome" = 'Crit')    AS "Crit",
+                    COUNT(*) FILTER (WHERE "Outcome" = 'Error')   AS "Error",
+                    COUNT(*) FILTER (WHERE "Outcome" = 'Unknown') AS "Unknown",
+                    COUNT(*)                                        AS "Total",
+                    AVG("DurationMs")                              AS "AvgDurationMs"
                 FROM "ProbeResults"
                 WHERE "ProbeId" = {0}
                   AND "WorkspaceId" = {1}
@@ -75,9 +79,13 @@ internal static class ResultEndpoints
             var result = rows.Select(r => new
             {
                 bucket = r.Bucket,
-                outcome = r.Outcome,
+                ok = r.Ok,
+                warn = r.Warn,
+                crit = r.Crit,
+                error = r.Error,
+                unknown = r.Unknown,
+                total = r.Total,
                 avgDurationMs = r.AvgDurationMs,
-                count = r.Count,
             });
 
             return Results.Ok(result);
@@ -105,9 +113,13 @@ internal static class ResultEndpoints
     private sealed class TimeseriesRow
     {
         public DateTimeOffset Bucket { get; set; }
-        public string Outcome { get; set; } = "";
+        public long Ok { get; set; }
+        public long Warn { get; set; }
+        public long Crit { get; set; }
+        public long Error { get; set; }
+        public long Unknown { get; set; }
+        public long Total { get; set; }
         public double AvgDurationMs { get; set; }
-        public long Count { get; set; }
     }
 
     private static object ToDto(Core.ProbeResult r) => new

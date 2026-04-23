@@ -4,6 +4,7 @@
 @inject IDbContextFactory<ScryDbContext> DbFactory
 @inject IJSRuntime JS
 @inject NavigationManager Nav
+@using Microsoft.AspNetCore.SignalR.Client
 
 <PageTitle>Topology — Scry</PageTitle>
 
@@ -217,10 +218,54 @@
 
     private DotNetObjectReference<Topology>? dotNetRef;
     private bool cytoscapeInitialized;
+    private HubConnection? _hub;
+    // Maps probeId → assetId so incoming SignalR events can update the correct node.
+    private Dictionary<Guid, Guid> _probeToAsset = [];
+    // Current health per asset for incremental SignalR updates.
+    private Dictionary<Guid, ProbeOutcome?> _assetHealth = [];
 
     protected override async Task OnInitializedAsync()
     {
         await RefreshAsync();
+        await ConnectHubAsync();
+    }
+
+    private async Task ConnectHubAsync()
+    {
+        var hubUrl = Nav.ToAbsoluteUri("/hubs/probes").ToString();
+        _hub = new HubConnectionBuilder()
+            .WithUrl(hubUrl)
+            .WithAutomaticReconnect()
+            .Build();
+
+        _hub.On<ProbeResultEvent>("ProbeResult", async evt =>
+        {
+            if (evt.WorkspaceId != WorkspaceId) { return; }
+            if (!_probeToAsset.TryGetValue(evt.ProbeId, out var assetId)) { return; }
+
+            if (!Enum.TryParse<ProbeOutcome>(evt.Outcome, out var incoming)) { return; }
+
+            // Recompute asset health: incoming result may improve or worsen it.
+            // Re-query all probes for this asset to get the accurate worst outcome.
+            _assetHealth[assetId] = incoming;
+            var health = _assetHealth[assetId]?.ToString();
+
+            // Update just this node's color without a full graph redraw.
+            if (cytoscapeInitialized)
+            {
+                await JS.InvokeVoidAsync("ScryTopology.updateNodeHealth", assetId.ToString(), health);
+            }
+        });
+
+        try
+        {
+            await _hub.StartAsync();
+            await _hub.InvokeAsync("JoinWorkspace", WorkspaceId.ToString());
+        }
+        catch
+        {
+            // Hub is best-effort; topology page works without it.
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -256,15 +301,19 @@
 
         var resultByProbe = latestResults.ToDictionary(r => r.ProbeId, r => r.Outcome);
 
-        var assetHealth = new Dictionary<Guid, ProbeOutcome?>();
+        _probeToAsset = probes
+            .Where(p => p.AssetId.HasValue)
+            .ToDictionary(p => p.Id, p => p.AssetId!.Value);
+
+        _assetHealth = new Dictionary<Guid, ProbeOutcome?>();
         foreach (var probe in probes)
         {
             if (probe.AssetId is null) { continue; }
             var assetId = probe.AssetId.Value;
             if (!resultByProbe.TryGetValue(probe.Id, out var outcome)) { continue; }
-            if (!assetHealth.TryGetValue(assetId, out var current) || current is null || WorstOutcome(outcome, current.Value))
+            if (!_assetHealth.TryGetValue(assetId, out var current) || current is null || WorstOutcome(outcome, current.Value))
             {
-                assetHealth[assetId] = outcome;
+                _assetHealth[assetId] = outcome;
             }
         }
 
@@ -274,7 +323,7 @@
             a.Id.ToString(),
             a.Name,
             a.Kind.ToString(),
-            assetHealth.TryGetValue(a.Id, out var h) ? h?.ToString() : null)).ToList();
+            _assetHealth.TryGetValue(a.Id, out var h) ? h?.ToString() : null)).ToList();
 
         var edges = relationships.Select(r => new GraphEdge(
             r.Id.ToString(),
@@ -393,6 +442,9 @@
         var asset = await ctx.Assets.FirstOrDefaultAsync(a => a.Id == id);
         if (asset is not null)
         {
+            await ctx.AssetRelationships
+                .Where(r => r.WorkspaceId == WorkspaceId && r.TargetAssetId == id)
+                .ExecuteDeleteAsync();
             ctx.Assets.Remove(asset);
             await ctx.SaveChangesAsync();
         }
@@ -409,8 +461,8 @@
             ProbeOutcome.Ok => 0,
             ProbeOutcome.Unknown => 1,
             ProbeOutcome.Warn => 2,
-            ProbeOutcome.Error => 3,
-            ProbeOutcome.Crit => 4,
+            ProbeOutcome.Crit => 3,
+            ProbeOutcome.Error => 4, // Error = probe couldn't run; worst because state is unknown
             _ => 0,
         };
         return Rank(incoming) > Rank(current);
@@ -427,16 +479,13 @@
 
     public async ValueTask DisposeAsync()
     {
+        if (_hub is not null)
+        {
+            try { await _hub.DisposeAsync(); } catch { }
+        }
         if (cytoscapeInitialized)
         {
-            try
-            {
-                await JS.InvokeVoidAsync("ScryTopology.destroy");
-            }
-            catch
-            {
-                // ignore JS interop errors on dispose
-            }
+            try { await JS.InvokeVoidAsync("ScryTopology.destroy"); } catch { }
         }
         dotNetRef?.Dispose();
     }
@@ -446,4 +495,5 @@
     private sealed record GraphNode(string id, string name, string kind, string? health);
     private sealed record GraphEdge(string id, string source, string target, string kind);
     private sealed record TopologyData(List<GraphNode> Nodes, List<GraphEdge> Edges);
+    private sealed record ProbeResultEvent(Guid ProbeId, Guid WorkspaceId, string Outcome, string? Message, DateTimeOffset CompletedAt, double DurationMs);
 }

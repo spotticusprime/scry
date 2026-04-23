@@ -70,15 +70,20 @@ internal static class TopologyEndpoints
             {
                 return Results.NotFound();
             }
+            // Delete inbound relationships explicitly — TargetAssetId FK is Restrict, not Cascade.
+            await ctx.AssetRelationships
+                .Where(r => r.WorkspaceId == workspaceId && r.TargetAssetId == id)
+                .ExecuteDeleteAsync();
             ctx.Assets.Remove(asset);
             await ctx.SaveChangesAsync();
             return Results.NoContent();
         });
 
+        // POST /assets/{id}/relationships — id is the source asset
         assets.MapPost("/{id:guid}/relationships", async (Guid workspaceId, Guid id, CreateRelationshipRequest req, ScryDbContext ctx) =>
         {
             ctx.CurrentWorkspaceId = workspaceId;
-            var sourceExists = await ctx.Assets.AnyAsync(a => a.Id == req.SourceAssetId);
+            var sourceExists = await ctx.Assets.AnyAsync(a => a.Id == id);
             var targetExists = await ctx.Assets.AnyAsync(a => a.Id == req.TargetAssetId);
             if (!sourceExists || !targetExists)
             {
@@ -91,7 +96,7 @@ internal static class TopologyEndpoints
             var rel = new AssetRelationship
             {
                 WorkspaceId = workspaceId,
-                SourceAssetId = req.SourceAssetId,
+                SourceAssetId = id,
                 TargetAssetId = req.TargetAssetId,
                 Kind = kind,
             };
@@ -180,8 +185,8 @@ internal static class TopologyEndpoints
             ProbeOutcome.Ok => 0,
             ProbeOutcome.Unknown => 1,
             ProbeOutcome.Warn => 2,
-            ProbeOutcome.Error => 3,
-            ProbeOutcome.Crit => 4,
+            ProbeOutcome.Crit => 3,
+            ProbeOutcome.Error => 4, // Error = probe couldn't run; worst because state is unknown
             _ => 0,
         };
         return Rank(incoming) > Rank(current);
@@ -217,5 +222,5 @@ internal static class TopologyEndpoints
         string? Name, string? Kind, string? ExternalId, string? Description);
 
     internal sealed record CreateRelationshipRequest(
-        Guid SourceAssetId, Guid TargetAssetId, string Kind);
+        Guid TargetAssetId, string Kind);
 }
