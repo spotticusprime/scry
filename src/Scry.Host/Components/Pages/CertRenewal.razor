@@ -1,0 +1,187 @@
+@page "/workspaces/{WorkspaceId:guid}/certs"
+@attribute [Authorize]
+@inject IDbContextFactory<ScryDbContext> DbFactory
+
+<PageTitle>Certificates — Scry</PageTitle>
+
+<div class="d-flex align-items-center justify-content-between mb-4">
+    <div>
+        <h1 class="page-title">Certificate Renewal</h1>
+        <p class="page-subtitle mb-0">TLS certificates monitored in this workspace</p>
+    </div>
+</div>
+
+@if (rows.Count == 0)
+{
+    <div class="scry-card p-4 text-center text-muted">
+        <i class="bi bi-shield-lock fs-2 d-block mb-2"></i>
+        <p>No TLS probes in this workspace.</p>
+        <p class="small">Create a probe with kind <code>tls</code> to start tracking certificates.</p>
+    </div>
+}
+else
+{
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-value text-success">@rows.Count(r => r.DaysLeft > 30)</div>
+                <div class="stat-label">Healthy (&gt;30 days)</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-value text-warning">@rows.Count(r => r.DaysLeft is > 7 and <= 30)</div>
+                <div class="stat-label">Expiring soon</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-value text-danger">@rows.Count(r => r.DaysLeft is not null and <= 7)</div>
+                <div class="stat-label">Critical (&lt;7 days)</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-value text-muted">@rows.Count(r => r.DaysLeft is null)</div>
+                <div class="stat-label">No data yet</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="scry-card">
+        <div class="scry-card-header"><i class="bi bi-shield-lock me-2"></i>Certificates</div>
+        <table class="table scry-table mb-0">
+            <thead>
+                <tr>
+                    <th style="width:14px"></th>
+                    <th>Probe</th>
+                    <th>Host</th>
+                    <th>Subject</th>
+                    <th>Expires</th>
+                    <th>Days left</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var r in rows.OrderBy(r => r.DaysLeft ?? int.MaxValue))
+                {
+                    <tr>
+                        <td><span class="dot @DotClass(r.Outcome)"></span></td>
+                        <td>
+                            <a href="/workspaces/@WorkspaceId/probes/@r.ProbeId" class="text-decoration-none fw-medium">
+                                @r.ProbeName
+                            </a>
+                        </td>
+                        <td class="font-mono text-muted">@(r.Host ?? "—")</td>
+                        <td class="text-muted" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                            @(r.Subject ?? "—")
+                        </td>
+                        <td class="text-muted">@(r.ExpiresAt?.ToString("yyyy-MM-dd") ?? "—")</td>
+                        <td>
+                            @if (r.DaysLeft is null)
+                            {
+                                <span class="text-muted">—</span>
+                            }
+                            else if (r.DaysLeft <= 7)
+                            {
+                                <span class="fw-bold text-danger">@r.DaysLeft days</span>
+                            }
+                            else if (r.DaysLeft <= 30)
+                            {
+                                <span class="fw-bold text-warning">@r.DaysLeft days</span>
+                            }
+                            else
+                            {
+                                <span class="text-success">@r.DaysLeft days</span>
+                            }
+                        </td>
+                        <td>
+                            @if (r.Outcome.HasValue)
+                            {
+                                <span class="badge @BadgeClass(r.Outcome.Value)">@r.Outcome</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted">No data</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid WorkspaceId { get; set; }
+
+    private List<CertRow> rows = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var ctx = await DbFactory.CreateDbContextAsync();
+        ctx.CurrentWorkspaceId = WorkspaceId;
+
+        var tlsProbes = await ctx.Probes
+            .Where(p => p.Kind == "tls")
+            .OrderBy(p => p.Name)
+            .ToListAsync();
+
+        var probeIds = tlsProbes.Select(p => p.Id).ToHashSet();
+
+        var latestResults = await ctx.ProbeResults
+            .Where(r => probeIds.Contains(r.ProbeId))
+            .GroupBy(r => r.ProbeId)
+            .Select(g => g.OrderByDescending(r => r.CompletedAt).First())
+            .ToListAsync();
+
+        var resultMap = latestResults.ToDictionary(r => r.ProbeId);
+
+        rows = tlsProbes.Select(p =>
+        {
+            resultMap.TryGetValue(p.Id, out var result);
+            int? daysLeft = null;
+            DateTimeOffset? expiresAt = null;
+            string? subject = null;
+            string? host = null;
+
+            if (result?.Attributes is not null)
+            {
+                if (result.Attributes.TryGetValue("days_left", out var dl) && int.TryParse(dl, out var d))
+                    daysLeft = d;
+                if (result.Attributes.TryGetValue("expires_at", out var exp) && DateTimeOffset.TryParse(exp, out var ea))
+                    expiresAt = ea;
+                if (result.Attributes.TryGetValue("subject", out var sub))
+                    subject = sub;
+                if (result.Attributes.TryGetValue("host", out var h))
+                    host = h;
+            }
+
+            return new CertRow(p.Id, p.Name, host, subject, expiresAt, daysLeft, result?.Outcome);
+        }).ToList();
+    }
+
+    private static string DotClass(ProbeOutcome? o) => o switch
+    {
+        ProbeOutcome.Ok    => "dot-ok",
+        ProbeOutcome.Warn  => "dot-warn",
+        ProbeOutcome.Crit  => "dot-crit",
+        ProbeOutcome.Error => "dot-error",
+        _                  => "dot-unknown",
+    };
+
+    private static string BadgeClass(ProbeOutcome o) => o switch
+    {
+        ProbeOutcome.Ok    => "badge-ok",
+        ProbeOutcome.Warn  => "badge-warn",
+        ProbeOutcome.Crit  => "badge-crit",
+        ProbeOutcome.Error => "badge-error",
+        _                  => "badge-unknown",
+    };
+
+    private sealed record CertRow(
+        Guid ProbeId, string ProbeName,
+        string? Host, string? Subject,
+        DateTimeOffset? ExpiresAt, int? DaysLeft,
+        ProbeOutcome? Outcome);
+}

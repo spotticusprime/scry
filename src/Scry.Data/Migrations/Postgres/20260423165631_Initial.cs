@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace Scry.Data.Migrations
+namespace Scry.Data.Migrations.Postgres
 {
     /// <inheritdoc />
     public partial class Initial : Migration
@@ -15,11 +15,11 @@ namespace Scry.Data.Migrations
                 name: "Workspaces",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    Name = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
-                    Description = table.Column<string>(type: "TEXT", maxLength: 2000, nullable: true),
-                    CreatedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
-                    UpdatedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    Description = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: true),
+                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -30,15 +30,17 @@ namespace Scry.Data.Migrations
                 name: "AlertRules",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    WorkspaceId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    Name = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
-                    Expression = table.Column<string>(type: "TEXT", nullable: false),
-                    Severity = table.Column<string>(type: "TEXT", maxLength: 16, nullable: false),
-                    Enabled = table.Column<bool>(type: "INTEGER", nullable: false),
-                    ForDuration = table.Column<TimeSpan>(type: "TEXT", nullable: false),
-                    CreatedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
-                    UpdatedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    WorkspaceId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    Expression = table.Column<string>(type: "text", nullable: false),
+                    Severity = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: false),
+                    Enabled = table.Column<bool>(type: "boolean", nullable: false),
+                    ForDuration = table.Column<TimeSpan>(type: "interval", nullable: false),
+                    ProbeIdFilter = table.Column<Guid>(type: "uuid", nullable: true),
+                    NotifierConfig = table.Column<string>(type: "text", nullable: true),
+                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -56,15 +58,15 @@ namespace Scry.Data.Migrations
                 name: "Assets",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    WorkspaceId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    Name = table.Column<string>(type: "TEXT", maxLength: 500, nullable: false),
-                    Kind = table.Column<string>(type: "TEXT", maxLength: 32, nullable: false),
-                    ExternalId = table.Column<string>(type: "TEXT", maxLength: 500, nullable: true),
-                    Provider = table.Column<string>(type: "TEXT", maxLength: 100, nullable: true),
-                    Attributes = table.Column<string>(type: "TEXT", nullable: false),
-                    CreatedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
-                    UpdatedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    WorkspaceId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Name = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
+                    Kind = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
+                    ExternalId = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    Provider = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
+                    Attributes = table.Column<string>(type: "text", nullable: false),
+                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -79,46 +81,16 @@ namespace Scry.Data.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "Jobs",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    WorkspaceId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    Kind = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
-                    Payload = table.Column<string>(type: "TEXT", nullable: false),
-                    Status = table.Column<string>(type: "TEXT", maxLength: 16, nullable: false),
-                    ClaimedBy = table.Column<string>(type: "TEXT", maxLength: 200, nullable: true),
-                    ClaimedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
-                    LeaseExpiresAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
-                    RunAfter = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
-                    AttemptCount = table.Column<int>(type: "INTEGER", nullable: false),
-                    MaxAttempts = table.Column<int>(type: "INTEGER", nullable: false),
-                    LastError = table.Column<string>(type: "TEXT", maxLength: 4000, nullable: true),
-                    CreatedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
-                    UpdatedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Jobs", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_Jobs_Workspaces_WorkspaceId",
-                        column: x => x.WorkspaceId,
-                        principalTable: "Workspaces",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "MaintenanceWindows",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    WorkspaceId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    Name = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
-                    StartsAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
-                    EndsAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
-                    AssetIds = table.Column<string>(type: "TEXT", nullable: true),
-                    CreatedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    WorkspaceId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    StartsAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    EndsAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    AssetIds = table.Column<string>(type: "text", nullable: true),
+                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -135,18 +107,18 @@ namespace Scry.Data.Migrations
                 name: "AlertEvents",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    WorkspaceId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    AlertRuleId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    Fingerprint = table.Column<string>(type: "TEXT", maxLength: 128, nullable: false),
-                    State = table.Column<string>(type: "TEXT", maxLength: 16, nullable: false),
-                    Severity = table.Column<string>(type: "TEXT", maxLength: 16, nullable: false),
-                    Summary = table.Column<string>(type: "TEXT", maxLength: 4000, nullable: true),
-                    OpenedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
-                    AcknowledgedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
-                    ResolvedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
-                    LastNotifiedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
-                    Labels = table.Column<string>(type: "TEXT", nullable: false)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    WorkspaceId = table.Column<Guid>(type: "uuid", nullable: false),
+                    AlertRuleId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Fingerprint = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
+                    State = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: false),
+                    Severity = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: false),
+                    Summary = table.Column<string>(type: "character varying(4000)", maxLength: 4000, nullable: true),
+                    OpenedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    AcknowledgedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
+                    ResolvedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
+                    LastNotifiedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
+                    Labels = table.Column<string>(type: "text", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -169,12 +141,12 @@ namespace Scry.Data.Migrations
                 name: "AssetRelationships",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    WorkspaceId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    SourceAssetId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    TargetAssetId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    Kind = table.Column<string>(type: "TEXT", maxLength: 32, nullable: false),
-                    CreatedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    WorkspaceId = table.Column<Guid>(type: "uuid", nullable: false),
+                    SourceAssetId = table.Column<Guid>(type: "uuid", nullable: false),
+                    TargetAssetId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Kind = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
+                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -203,16 +175,16 @@ namespace Scry.Data.Migrations
                 name: "Probes",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    WorkspaceId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    Name = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
-                    Kind = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
-                    Definition = table.Column<string>(type: "TEXT", nullable: false),
-                    Interval = table.Column<TimeSpan>(type: "TEXT", nullable: false),
-                    Enabled = table.Column<bool>(type: "INTEGER", nullable: false),
-                    AssetId = table.Column<Guid>(type: "TEXT", nullable: true),
-                    CreatedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
-                    UpdatedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    WorkspaceId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    Kind = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                    Definition = table.Column<string>(type: "text", nullable: false),
+                    Interval = table.Column<TimeSpan>(type: "interval", nullable: false),
+                    Enabled = table.Column<bool>(type: "boolean", nullable: false),
+                    AssetId = table.Column<Guid>(type: "uuid", nullable: true),
+                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -236,15 +208,15 @@ namespace Scry.Data.Migrations
                 name: "ProbeResults",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    WorkspaceId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    ProbeId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    Outcome = table.Column<string>(type: "TEXT", maxLength: 16, nullable: false),
-                    Message = table.Column<string>(type: "TEXT", maxLength: 4000, nullable: true),
-                    DurationMs = table.Column<long>(type: "INTEGER", nullable: false),
-                    StartedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
-                    CompletedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
-                    Attributes = table.Column<string>(type: "TEXT", nullable: false)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    WorkspaceId = table.Column<Guid>(type: "uuid", nullable: false),
+                    ProbeId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Outcome = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: false),
+                    Message = table.Column<string>(type: "character varying(4000)", maxLength: 4000, nullable: true),
+                    DurationMs = table.Column<long>(type: "bigint", nullable: false),
+                    StartedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    CompletedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    Attributes = table.Column<string>(type: "text", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -299,7 +271,7 @@ namespace Scry.Data.Migrations
                 columns: new[] { "WorkspaceId", "SourceAssetId", "Kind" });
 
             migrationBuilder.CreateIndex(
-                name: "IX_AssetRelationships_WorkspaceId_SourceAssetId_TargetAssetId_Kind",
+                name: "IX_AssetRelationships_WorkspaceId_SourceAssetId_TargetAssetId_~",
                 table: "AssetRelationships",
                 columns: new[] { "WorkspaceId", "SourceAssetId", "TargetAssetId", "Kind" },
                 unique: true);
@@ -325,16 +297,6 @@ namespace Scry.Data.Migrations
                 columns: new[] { "WorkspaceId", "Provider", "ExternalId" },
                 unique: true,
                 filter: "\"ExternalId\" IS NOT NULL");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Jobs_WorkspaceId_Status_LeaseExpiresAt",
-                table: "Jobs",
-                columns: new[] { "WorkspaceId", "Status", "LeaseExpiresAt" });
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Jobs_WorkspaceId_Status_RunAfter",
-                table: "Jobs",
-                columns: new[] { "WorkspaceId", "Status", "RunAfter" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_MaintenanceWindows_WorkspaceId",
@@ -386,9 +348,6 @@ namespace Scry.Data.Migrations
 
             migrationBuilder.DropTable(
                 name: "AssetRelationships");
-
-            migrationBuilder.DropTable(
-                name: "Jobs");
 
             migrationBuilder.DropTable(
                 name: "MaintenanceWindows");

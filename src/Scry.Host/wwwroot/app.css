@@ -119,9 +119,12 @@ html, body {
     margin-top: 4px;
 }
 
-/* Tables */
+/* Tables — dark-mode Bootstrap already sets transparent bg and light text;
+   these variables ensure it holds even if Bootstrap's cascade changes. */
 .scry-table {
-    color: #e0e0e0;
+    --bs-table-bg: transparent;
+    --bs-table-hover-bg: #2d3039;
+    --bs-table-border-color: #2d3039;
     font-size: 0.875rem;
 }
 
@@ -130,20 +133,10 @@ html, body {
     font-size: 0.75rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    border-color: #2d3039;
     font-weight: 500;
 }
 
-.scry-table tbody tr {
-    border-color: #2d3039;
-}
-
-.scry-table tbody tr:hover {
-    background-color: #2d3039;
-}
-
 .scry-table td {
-    border-color: #2d3039;
     vertical-align: middle;
 }
 
@@ -173,6 +166,7 @@ html, body {
     color: #6c757d;
 }
 
+/* Main content area background — explicit so it never bleeds through from Bootstrap */
 .bg-dark-subtle {
     background-color: #111318 !important;
 }

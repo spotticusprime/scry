@@ -36,6 +36,16 @@
                 </a>
             </li>
             <li class="nav-item">
+                <a href="@CertsHref" class="nav-link @ActiveClass("/certs")">
+                    <i class="bi bi-shield-lock me-2"></i> Certificates
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="@TopologyHref" class="nav-link @ActiveClass("/topology")">
+                    <i class="bi bi-diagram-3 me-2"></i> Topology
+                </a>
+            </li>
+            <li class="nav-item">
                 <a href="@AlertsHref" class="nav-link @ActiveClass("/alerts")">
                     <i class="bi bi-bell-fill me-2"></i> Alerts
                 </a>
@@ -44,6 +54,11 @@
 
         <hr class="border-secondary" />
         <ul class="nav nav-pills flex-column">
+            <li class="nav-item">
+                <a href="/inventory" class="nav-link @ActiveClass("/inventory")">
+                    <i class="bi bi-list-check me-2"></i> Inventory
+                </a>
+            </li>
             <li class="nav-item">
                 <a href="/workspaces" class="nav-link @ActiveClass("/workspaces")">
                     <i class="bi bi-diagram-3 me-2"></i> Workspaces
@@ -74,7 +89,6 @@
         await using var ctx = await DbFactory.CreateDbContextAsync();
         workspaces = await ctx.Workspaces.OrderBy(w => w.Name).ToListAsync();
 
-        // Infer current workspace from URL
         var uri = new Uri(Nav.Uri);
         var segments = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
         if (segments.Length >= 2 && segments[0] == "workspaces"
@@ -102,6 +116,12 @@
     private string ProbesHref => CurrentWorkspaceId.HasValue
         ? $"/workspaces/{CurrentWorkspaceId}/probes" : "/workspaces";
 
+    private string CertsHref => CurrentWorkspaceId.HasValue
+        ? $"/workspaces/{CurrentWorkspaceId}/certs" : "/workspaces";
+
+    private string TopologyHref => CurrentWorkspaceId.HasValue
+        ? $"/workspaces/{CurrentWorkspaceId}/topology" : "/workspaces";
+
     private string AlertsHref => CurrentWorkspaceId.HasValue
         ? $"/workspaces/{CurrentWorkspaceId}/alerts" : "/workspaces";
 
@@ -110,10 +130,13 @@
         var path = new Uri(Nav.Uri).AbsolutePath;
         return segment switch
         {
-            "/" => path == "/" || (path.StartsWith("/workspaces/") && !path.Contains("/probes") && !path.Contains("/alerts"))
+            "/" => path == "/" || (path.StartsWith("/workspaces/") && !path.Contains("/probes") && !path.Contains("/alerts") && !path.Contains("/certs") && !path.Contains("/topology"))
                 ? "active" : "",
-            "/probes" => path.Contains("/probes") ? "active" : "",
-            "/alerts"  => path.Contains("/alerts") ? "active" : "",
+            "/probes"    => path.Contains("/probes") ? "active" : "",
+            "/certs"     => path.Contains("/certs") ? "active" : "",
+            "/topology"  => path.Contains("/topology") ? "active" : "",
+            "/alerts"    => path.Contains("/alerts") ? "active" : "",
+            "/inventory" => path == "/inventory" ? "active" : "",
             "/workspaces" => path == "/workspaces" ? "active" : "",
             _ => "",
         };

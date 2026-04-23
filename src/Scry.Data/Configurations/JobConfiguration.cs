@@ -6,6 +6,15 @@ namespace Scry.Data.Configurations;
 
 internal sealed class JobConfiguration : IEntityTypeConfiguration<Job>
 {
+    private readonly bool _crossDatabase;
+
+    // crossDatabase: true when Jobs live in a separate DB from Workspaces —
+    // skips the FK that would require a cross-DB join.
+    public JobConfiguration(bool crossDatabase = false)
+    {
+        _crossDatabase = crossDatabase;
+    }
+
     public void Configure(EntityTypeBuilder<Job> builder)
     {
         builder.ToTable("Jobs");
@@ -22,15 +31,16 @@ internal sealed class JobConfiguration : IEntityTypeConfiguration<Job>
         builder.Property(j => j.CreatedAt).IsRequired();
         builder.Property(j => j.UpdatedAt).IsRequired();
 
-        builder.HasOne<Workspace>()
-            .WithMany()
-            .HasForeignKey(j => j.WorkspaceId)
-            .OnDelete(DeleteBehavior.Cascade);
+        if (!_crossDatabase)
+        {
+            builder.HasOne<Workspace>()
+                .WithMany()
+                .HasForeignKey(j => j.WorkspaceId)
+                .OnDelete(DeleteBehavior.Cascade);
+        }
 
         builder.HasIndex(j => new { j.WorkspaceId, j.Status, j.RunAfter });
         builder.HasIndex(j => new { j.WorkspaceId, j.Status, j.LeaseExpiresAt });
-        // Cross-workspace claim (ClaimAnyAsync) queries without a WorkspaceId prefix;
-        // the workspace-scoped indexes above cannot serve it efficiently.
         builder.HasIndex(j => new { j.Status, j.RunAfter });
     }
 }

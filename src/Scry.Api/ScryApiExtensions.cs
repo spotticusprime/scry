@@ -24,10 +24,12 @@ public static class ScryApiExtensions
     /// <summary>Maps all Scry REST endpoints onto the application.</summary>
     public static IEndpointRouteBuilder MapScryApi(this IEndpointRouteBuilder app)
     {
-        app.MapWorkspaceEndpoints();
-        app.MapProbeEndpoints();
-        app.MapResultEndpoints();
-        app.MapAlertRuleEndpoints();
+        // All API endpoints require authentication by default.
+        var api = app.MapGroup("/api").RequireAuthorization();
+        api.MapWorkspaceEndpoints();
+        api.MapProbeEndpoints();
+        api.MapResultEndpoints();
+        api.MapAlertRuleEndpoints();
         return app;
     }
 }

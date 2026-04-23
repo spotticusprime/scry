@@ -6,12 +6,11 @@ namespace Scry.Data;
 
 public static class ScryDataExtensions
 {
-    // Requires IDbContextFactory<ScryDbContext> to already be registered (e.g. via AddDbContextFactory).
     public static IServiceCollection AddScryJobQueue(this IServiceCollection services)
     {
-        services.AddSingleton<IJobQueue, SqlitePollingJobQueue>();
+        services.AddSingleton<IJobQueue, MySqlJobQueue>();
         services.AddHostedService(sp =>
-            new JobReaper(sp.GetRequiredService<IDbContextFactory<ScryDbContext>>()));
+            new JobReaper(sp.GetRequiredService<IDbContextFactory<ScryJobDbContext>>()));
         return services;
     }
 }

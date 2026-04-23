@@ -6,6 +6,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Scry.Api\Scry.Api.csproj" />
     <ProjectReference Include="..\Scry.Data\Scry.Data.csproj" />
     <ProjectReference Include="..\Scry.Probes\Scry.Probes.csproj" />

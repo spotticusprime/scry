@@ -11,7 +11,7 @@ internal static class WorkspaceEndpoints
 {
     internal static IEndpointRouteBuilder MapWorkspaceEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/workspaces").WithTags("Workspaces");
+        var group = app.MapGroup("/workspaces").WithTags("Workspaces");
 
         group.MapGet("/", async (ScryDbContext ctx) =>
         {
@@ -46,15 +46,24 @@ internal static class WorkspaceEndpoints
             return Results.Ok(ToDto(w));
         });
 
-        group.MapDelete("/{id:guid}", async (Guid id, ScryDbContext ctx) =>
+        group.MapDelete("/{id:guid}", async (Guid id, ScryDbContext ctx, IDbContextFactory<ScryJobDbContext> jobDbFactory) =>
         {
             var w = await ctx.Workspaces.FindAsync(id);
             if (w is null)
             {
                 return Results.NotFound();
             }
+
+            // Delete workspace from Postgres (cascade removes Probes, ProbeResults, AlertRules).
             ctx.Workspaces.Remove(w);
             await ctx.SaveChangesAsync();
+
+            // Purge orphaned jobs from MySQL — no cross-DB FK means we must do this explicitly.
+            await using var jobCtx = await jobDbFactory.CreateDbContextAsync();
+            await jobCtx.Jobs
+                .Where(j => j.WorkspaceId == id)
+                .ExecuteDeleteAsync();
+
             return Results.NoContent();
         });
 

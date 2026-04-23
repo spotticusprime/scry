@@ -1,0 +1,230 @@
+@page "/inventory"
+@attribute [Authorize]
+@inject IDbContextFactory<ScryDbContext> DbFactory
+
+<PageTitle>Inventory — Scry</PageTitle>
+
+<div class="d-flex align-items-center justify-content-between mb-4">
+    <div>
+        <h1 class="page-title">Inventory</h1>
+        <p class="page-subtitle mb-0">All monitored resources across workspaces</p>
+    </div>
+    <div class="d-flex gap-2">
+        @foreach (var k in allKinds)
+        {
+            <button class="btn btn-sm @(kindFilter == k ? "btn-primary" : "btn-outline-secondary")"
+                    @onclick="() => kindFilter = kindFilter == k ? null : k">
+                @k
+            </button>
+        }
+        @if (kindFilter is not null)
+        {
+            <button class="btn btn-sm btn-outline-secondary" @onclick="() => kindFilter = null">
+                <i class="bi bi-x"></i> Clear
+            </button>
+        }
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-2">
+        <div class="stat-card">
+            <div class="stat-value">@filtered.Count</div>
+            <div class="stat-label">Resources</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="stat-card">
+            <div class="stat-value text-success">@filtered.Count(r => r.Outcome == ProbeOutcome.Ok)</div>
+            <div class="stat-label">Healthy</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="stat-card">
+            <div class="stat-value text-warning">@filtered.Count(r => r.Outcome == ProbeOutcome.Warn)</div>
+            <div class="stat-label">Warning</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="stat-card">
+            <div class="stat-value text-danger">@filtered.Count(r => r.Outcome == ProbeOutcome.Crit)</div>
+            <div class="stat-label">Critical</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="stat-card">
+            <div class="stat-value text-secondary">@filtered.Count(r => r.Outcome == ProbeOutcome.Error)</div>
+            <div class="stat-label">Error</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="stat-card">
+            <div class="stat-value text-muted">@filtered.Count(r => r.Outcome is null)</div>
+            <div class="stat-label">Pending</div>
+        </div>
+    </div>
+</div>
+
+<div class="scry-card">
+    <div class="scry-card-header"><i class="bi bi-list-check me-2"></i>Resources</div>
+    @if (filtered.Count == 0)
+    {
+        <div class="p-4 text-center text-muted">No resources found.</div>
+    }
+    else
+    {
+        <table class="table scry-table mb-0">
+            <thead>
+                <tr>
+                    <th style="width:14px"></th>
+                    <th>Name</th>
+                    <th>Kind</th>
+                    <th>Target</th>
+                    <th>Workspace</th>
+                    <th>Status</th>
+                    <th>Message</th>
+                    <th>Last run</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var r in filtered.OrderBy(r => r.Outcome).ThenBy(r => r.WorkspaceName).ThenBy(r => r.Name))
+                {
+                    <tr>
+                        <td><span class="dot @DotClass(r.Outcome)"></span></td>
+                        <td>
+                            <a href="/workspaces/@r.WorkspaceId/probes/@r.ProbeId" class="text-decoration-none fw-medium">
+                                @r.Name
+                            </a>
+                        </td>
+                        <td><span class="font-mono text-muted">@r.Kind</span></td>
+                        <td class="font-mono text-muted" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                            @r.Target
+                        </td>
+                        <td>
+                            <a href="/workspaces/@r.WorkspaceId" class="text-muted text-decoration-none small">
+                                @r.WorkspaceName
+                            </a>
+                        </td>
+                        <td>
+                            @if (r.Outcome.HasValue)
+                            {
+                                <span class="badge @BadgeClass(r.Outcome.Value)">@r.Outcome</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted">—</span>
+                            }
+                        </td>
+                        <td class="text-muted" style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                            @r.Message
+                        </td>
+                        <td class="text-muted">@Ago(r.CompletedAt)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>
+
+@code {
+    private List<InventoryRow> allRows = [];
+    private List<string> allKinds = [];
+    private string? kindFilter;
+
+    private List<InventoryRow> filtered =>
+        kindFilter is null ? allRows : allRows.Where(r => r.Kind == kindFilter).ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var ctx = await DbFactory.CreateDbContextAsync();
+
+        var workspaces = await ctx.Workspaces.ToListAsync();
+        var wsMap = workspaces.ToDictionary(w => w.Id);
+
+        var probes = await ctx.Probes
+            .IgnoreQueryFilters()
+            .OrderBy(p => p.Name)
+            .ToListAsync();
+
+        var probeIds = probes.Select(p => p.Id).ToHashSet();
+
+        var latestResults = await ctx.ProbeResults
+            .IgnoreQueryFilters()
+            .Where(r => probeIds.Contains(r.ProbeId))
+            .GroupBy(r => r.ProbeId)
+            .Select(g => g.OrderByDescending(r => r.CompletedAt).First())
+            .ToListAsync();
+
+        var resultMap = latestResults.ToDictionary(r => r.ProbeId);
+
+        allRows = probes.Select(p =>
+        {
+            resultMap.TryGetValue(p.Id, out var result);
+            wsMap.TryGetValue(p.WorkspaceId, out var ws);
+            return new InventoryRow(
+                p.Id, p.WorkspaceId,
+                ws?.Name ?? "Unknown",
+                p.Name, p.Kind,
+                ExtractTarget(p.Kind, p.Definition),
+                result?.Outcome, result?.Message, result?.CompletedAt);
+        }).ToList();
+
+        allKinds = allRows.Select(r => r.Kind).Distinct().Order().ToList();
+    }
+
+    private static string ExtractTarget(string kind, string definition)
+    {
+        var lines = definition.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var key = kind switch
+        {
+            "http"         => "url",
+            "tls" or "dns" => "host",
+            "azure_metric" => "resource_name",
+            "sql_kpi"      => "connection_string_name",
+            _              => null,
+        };
+        if (key is null) return "—";
+        foreach (var line in lines)
+        {
+            var trimmed = line.TrimStart();
+            if (trimmed.StartsWith(key + ":", StringComparison.OrdinalIgnoreCase))
+            {
+                return trimmed[(key.Length + 1)..].Trim().Trim('"');
+            }
+        }
+        return "—";
+    }
+
+    private static string Ago(DateTimeOffset? t)
+    {
+        if (t is null) return "—";
+        var diff = DateTimeOffset.UtcNow - t.Value;
+        return diff.TotalMinutes < 1  ? $"{(int)diff.TotalSeconds}s ago"
+             : diff.TotalHours < 1    ? $"{(int)diff.TotalMinutes}m ago"
+             : diff.TotalDays < 1     ? $"{(int)diff.TotalHours}h ago"
+             : t.Value.ToString("MMM d");
+    }
+
+    private static string DotClass(ProbeOutcome? o) => o switch
+    {
+        ProbeOutcome.Ok    => "dot-ok",
+        ProbeOutcome.Warn  => "dot-warn",
+        ProbeOutcome.Crit  => "dot-crit",
+        ProbeOutcome.Error => "dot-error",
+        _                  => "dot-unknown",
+    };
+
+    private static string BadgeClass(ProbeOutcome o) => o switch
+    {
+        ProbeOutcome.Ok    => "badge-ok",
+        ProbeOutcome.Warn  => "badge-warn",
+        ProbeOutcome.Crit  => "badge-crit",
+        ProbeOutcome.Error => "badge-error",
+        _                  => "badge-unknown",
+    };
+
+    private sealed record InventoryRow(
+        Guid ProbeId, Guid WorkspaceId, string WorkspaceName,
+        string Name, string Kind, string Target,
+        ProbeOutcome? Outcome, string? Message, DateTimeOffset? CompletedAt);
+}

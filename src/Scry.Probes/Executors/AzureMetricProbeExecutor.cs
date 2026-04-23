@@ -44,9 +44,9 @@ internal sealed class AzureMetricProbeExecutor : IProbeExecutor
             {
                 "maximum" => MetricAggregationType.Maximum,
                 "minimum" => MetricAggregationType.Minimum,
-                "total"   => MetricAggregationType.Total,
-                "count"   => MetricAggregationType.Count,
-                _         => MetricAggregationType.Average,
+                "total" => MetricAggregationType.Total,
+                "count" => MetricAggregationType.Count,
+                _ => MetricAggregationType.Average,
             };
 
             var response = await client.QueryResourceAsync(
@@ -86,9 +86,9 @@ internal sealed class AzureMetricProbeExecutor : IProbeExecutor
                         {
                             MetricAggregationType.Maximum => lastPoint.Maximum,
                             MetricAggregationType.Minimum => lastPoint.Minimum,
-                            MetricAggregationType.Total   => lastPoint.Total,
-                            MetricAggregationType.Count   => lastPoint.Count,
-                            _                             => lastPoint.Average,
+                            MetricAggregationType.Total => lastPoint.Total,
+                            MetricAggregationType.Count => lastPoint.Count,
+                            _ => lastPoint.Average,
                         };
                         break;
                     }
@@ -155,13 +155,13 @@ internal sealed class AzureMetricProbeExecutor : IProbeExecutor
 
     private static ProbeResult Fail(Probe probe, DateTimeOffset started, Stopwatch sw,
         ProbeOutcome outcome, string message) => new()
-    {
-        WorkspaceId = probe.WorkspaceId,
-        ProbeId = probe.Id,
-        Outcome = outcome,
-        Message = message,
-        DurationMs = sw.ElapsedMilliseconds,
-        StartedAt = started,
-        CompletedAt = DateTimeOffset.UtcNow,
-    };
+        {
+            WorkspaceId = probe.WorkspaceId,
+            ProbeId = probe.Id,
+            Outcome = outcome,
+            Message = message,
+            DurationMs = sw.ElapsedMilliseconds,
+            StartedAt = started,
+            CompletedAt = DateTimeOffset.UtcNow,
+        };
 }

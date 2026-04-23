@@ -1,6 +1,7 @@
 @page "/workspaces/{WorkspaceId:guid}/probes/{ProbeId:guid}"
 @attribute [Authorize]
 @inject IDbContextFactory<ScryDbContext> DbFactory
+@inject NavigationManager Nav
 
 <PageTitle>@(probe?.Name ?? "Probe") — Scry</PageTitle>
 
@@ -25,45 +26,104 @@
                 · @(probe.Enabled ? "Active" : "Paused")</p>
         </div>
     </div>
-    @if (latestOutcome.HasValue)
-    {
-        <span class="badge @BadgeClass(latestOutcome.Value) fs-6 px-3 py-2">@latestOutcome</span>
-    }
+    <div class="d-flex align-items-center gap-2">
+        @if (latestOutcome.HasValue)
+        {
+            <span class="badge @BadgeClass(latestOutcome.Value) fs-6 px-3 py-2">@latestOutcome</span>
+        }
+        @if (!editing && !confirmDelete)
+        {
+            <button class="btn btn-sm btn-outline-secondary" @onclick="StartEdit">
+                <i class="bi bi-pencil me-1"></i>Edit
+            </button>
+            <button class="btn btn-sm btn-outline-danger" @onclick="() => confirmDelete = true">
+                <i class="bi bi-trash me-1"></i>Delete
+            </button>
+        }
+    </div>
 </div>
 
+@if (confirmDelete)
+{
+    <div class="scry-card p-4 mb-4 border-danger">
+        <p class="mb-3">Delete <strong>@probe.Name</strong>? This removes the probe and all its history. This cannot be undone.</p>
+        <div class="d-flex gap-2">
+            <button class="btn btn-danger" @onclick="DeleteAsync">Yes, delete</button>
+            <button class="btn btn-secondary" @onclick="() => confirmDelete = false">Cancel</button>
+        </div>
+    </div>
+}
+
+@if (editing)
+{
+    <div class="scry-card mb-4">
+        <div class="scry-card-header"><i class="bi bi-pencil me-2"></i>Edit probe</div>
+        <div class="p-4">
+            <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                    <label class="form-label sidebar-label">Name</label>
+                    <input type="text" class="form-control" @bind="editName" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label sidebar-label">Interval (HH:MM:SS)</label>
+                    <input type="text" class="form-control font-mono" @bind="editInterval" placeholder="00:05:00" />
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" id="enabledSwitch" @bind="editEnabled" />
+                        <label class="form-check-label" for="enabledSwitch">Enabled</label>
+                    </div>
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label sidebar-label">Definition (YAML)</label>
+                <textarea class="form-control font-mono" rows="14" @bind="editDefinition"></textarea>
+            </div>
+            @if (saveError is not null)
+            {
+                <div class="alert alert-danger py-2 small">@saveError</div>
+            }
+            <div class="d-flex gap-2">
+                <button class="btn btn-primary" @onclick="SaveAsync">Save changes</button>
+                <button class="btn btn-outline-secondary" @onclick="CancelEdit">Cancel</button>
+            </div>
+        </div>
+    </div>
+}
+
 <div class="row g-3 mb-4">
-    <!-- Latest result -->
     @if (results.Count > 0)
     {
         var latest = results[0];
         <div class="col-md-4">
             <div class="scry-card p-3">
                 <div class="sidebar-label">Latest message</div>
-                <p class="mb-0 small text-white">@latest.Message</p>
+                <p class="mb-0 small">@latest.Message</p>
             </div>
         </div>
         <div class="col-md-4">
             <div class="scry-card p-3">
                 <div class="sidebar-label">Last run</div>
-                <p class="mb-0 small text-white">@latest.CompletedAt.ToString("yyyy-MM-dd HH:mm:ss") UTC</p>
+                <p class="mb-0 small">@latest.CompletedAt.ToString("yyyy-MM-dd HH:mm:ss") UTC</p>
             </div>
         </div>
         <div class="col-md-4">
             <div class="scry-card p-3">
                 <div class="sidebar-label">Duration</div>
-                <p class="mb-0 small text-white">@latest.DurationMs ms</p>
+                <p class="mb-0 small">@latest.DurationMs ms</p>
             </div>
         </div>
     }
 </div>
 
-<!-- Definition -->
-<div class="scry-card mb-3">
-    <div class="scry-card-header"><i class="bi bi-code me-2"></i>Definition (YAML)</div>
-    <pre class="p-3 mb-0 font-mono text-muted" style="font-size:0.8rem;white-space:pre-wrap;word-break:break-all;">@probe.Definition</pre>
-</div>
+@if (!editing)
+{
+    <div class="scry-card mb-3">
+        <div class="scry-card-header"><i class="bi bi-code me-2"></i>Definition (YAML)</div>
+        <pre class="p-3 mb-0 font-mono" style="font-size:0.8rem;white-space:pre-wrap;word-break:break-all;">@probe.Definition</pre>
+    </div>
+}
 
-<!-- Attributes from latest result -->
 @if (results.Count > 0 && results[0].Attributes.Count > 0)
 {
     <div class="scry-card mb-3">
@@ -75,7 +135,7 @@
                     <div class="col-md-6">
                         <div class="d-flex justify-content-between small">
                             <span class="text-muted font-mono">@k</span>
-                            <span class="text-white font-mono">@v</span>
+                            <span class="font-mono">@v</span>
                         </div>
                     </div>
                 }
@@ -84,7 +144,6 @@
     </div>
 }
 
-<!-- Result history -->
 <div class="scry-card">
     <div class="scry-card-header"><i class="bi bi-clock-history me-2"></i>Result history (last 100)</div>
     @if (results.Count == 0)
@@ -129,7 +188,20 @@
     private List<ProbeResult> results = [];
     private ProbeOutcome? latestOutcome;
 
+    private bool editing;
+    private bool confirmDelete;
+    private string editName = "";
+    private string editInterval = "";
+    private bool editEnabled;
+    private string editDefinition = "";
+    private string? saveError;
+
     protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
     {
         await using var ctx = await DbFactory.CreateDbContextAsync();
         ctx.CurrentWorkspaceId = WorkspaceId;
@@ -144,6 +216,64 @@
             .ToListAsync();
 
         latestOutcome = results.Count > 0 ? results[0].Outcome : null;
+    }
+
+    private void StartEdit()
+    {
+        editName = probe!.Name;
+        editInterval = probe.Interval.ToString(@"hh\:mm\:ss");
+        editEnabled = probe.Enabled;
+        editDefinition = probe.Definition;
+        saveError = null;
+        editing = true;
+    }
+
+    private void CancelEdit()
+    {
+        editing = false;
+        saveError = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (!TimeSpan.TryParse(editInterval, out var interval) || interval <= TimeSpan.Zero)
+        {
+            saveError = "Interval must be a valid time span (e.g. 00:05:00).";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(editName))
+        {
+            saveError = "Name is required.";
+            return;
+        }
+
+        await using var ctx = await DbFactory.CreateDbContextAsync();
+        ctx.CurrentWorkspaceId = WorkspaceId;
+        var p = await ctx.Probes.FirstOrDefaultAsync(x => x.Id == ProbeId);
+        if (p is null) return;
+
+        p.Name = editName.Trim();
+        p.Definition = editDefinition;
+        p.Interval = interval;
+        p.Enabled = editEnabled;
+        await ctx.SaveChangesAsync();
+
+        editing = false;
+        saveError = null;
+        await LoadAsync();
+    }
+
+    private async Task DeleteAsync()
+    {
+        await using var ctx = await DbFactory.CreateDbContextAsync();
+        ctx.CurrentWorkspaceId = WorkspaceId;
+        var p = await ctx.Probes.FirstOrDefaultAsync(x => x.Id == ProbeId);
+        if (p is not null)
+        {
+            ctx.Probes.Remove(p);
+            await ctx.SaveChangesAsync();
+        }
+        Nav.NavigateTo($"/workspaces/{WorkspaceId}/probes");
     }
 
     private static string DotClass(ProbeOutcome? o) => o switch

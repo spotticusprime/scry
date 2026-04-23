@@ -19,6 +19,10 @@ Thumbs.db
 .env.*
 !.env.example
 
+# Local appsettings overrides — put real connection strings and passwords here
+appsettings.Local.json
+appsettings.*.Local.json
+
 # Local data
 *.db
 *.db-journal

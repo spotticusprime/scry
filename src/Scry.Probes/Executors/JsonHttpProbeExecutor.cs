@@ -110,16 +110,16 @@ internal sealed class JsonHttpProbeExecutor : IProbeExecutor
 
     private ProbeResult StatusResult(Probe probe, DateTimeOffset started, Stopwatch sw,
         ProbeOutcome outcome, string message, int statusCode) => new()
-    {
-        WorkspaceId = probe.WorkspaceId,
-        ProbeId = probe.Id,
-        Outcome = outcome,
-        Message = message,
-        DurationMs = sw.ElapsedMilliseconds,
-        StartedAt = started,
-        CompletedAt = DateTimeOffset.UtcNow,
-        Attributes = new Dictionary<string, string> { ["status_code"] = statusCode.ToString() },
-    };
+        {
+            WorkspaceId = probe.WorkspaceId,
+            ProbeId = probe.Id,
+            Outcome = outcome,
+            Message = message,
+            DurationMs = sw.ElapsedMilliseconds,
+            StartedAt = started,
+            CompletedAt = DateTimeOffset.UtcNow,
+            Attributes = new Dictionary<string, string> { ["status_code"] = statusCode.ToString() },
+        };
 
     // Traverses a dot-notation path (e.g. "data.health.status") through a JSON object.
     private static bool TryGetJsonValue(JsonDocument doc, string dotPath, out string? value)
@@ -137,10 +137,10 @@ internal sealed class JsonHttpProbeExecutor : IProbeExecutor
         value = current.ValueKind switch
         {
             JsonValueKind.String => current.GetString(),
-            JsonValueKind.True   => "true",
-            JsonValueKind.False  => "false",
-            JsonValueKind.Null   => null,
-            _                    => current.GetRawText(),
+            JsonValueKind.True => "true",
+            JsonValueKind.False => "false",
+            JsonValueKind.Null => null,
+            _ => current.GetRawText(),
         };
         return true;
     }

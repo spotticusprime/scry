@@ -2,23 +2,83 @@
 @page "/workspaces"
 @attribute [Authorize]
 @inject IDbContextFactory<ScryDbContext> DbFactory
+@inject IDbContextFactory<ScryJobDbContext> JobDbFactory
 @inject NavigationManager Nav
 
 <PageTitle>Workspaces — Scry</PageTitle>
 
-<div class="d-flex align-items-center mb-4">
+<div class="d-flex align-items-center justify-content-between mb-4">
     <div>
         <h1 class="page-title">Workspaces</h1>
-        <p class="page-subtitle mb-0">Select a workspace to view its dashboard</p>
+        <p class="page-subtitle mb-0">@workspaces.Count workspace(s)</p>
     </div>
+    @if (!creating)
+    {
+        <button class="btn btn-primary btn-sm" @onclick="() => creating = true">
+            <i class="bi bi-plus-lg me-1"></i>New workspace
+        </button>
+    }
 </div>
 
-@if (workspaces.Count == 0)
+@if (creating)
+{
+    <div class="scry-card mb-4">
+        <div class="scry-card-header"><i class="bi bi-plus-circle me-2"></i>New workspace</div>
+        <div class="p-4">
+            <div class="row g-3 mb-3">
+                <div class="col-md-5">
+                    <label class="form-label sidebar-label">Name</label>
+                    <input type="text" class="form-control" @bind="newName" placeholder="My workspace" autofocus />
+                </div>
+                <div class="col-md-7">
+                    <label class="form-label sidebar-label">Description (optional)</label>
+                    <input type="text" class="form-control" @bind="newDescription" placeholder="What does this workspace monitor?" />
+                </div>
+            </div>
+            @if (createError is not null)
+            {
+                <div class="alert alert-danger py-2 small">@createError</div>
+            }
+            <div class="d-flex gap-2">
+                <button class="btn btn-primary" @onclick="CreateAsync">Create</button>
+                <button class="btn btn-outline-secondary" @onclick="CancelCreate">Cancel</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (editingId.HasValue)
+{
+    <div class="scry-card mb-4">
+        <div class="scry-card-header"><i class="bi bi-pencil me-2"></i>Edit workspace</div>
+        <div class="p-4">
+            <div class="row g-3 mb-3">
+                <div class="col-md-5">
+                    <label class="form-label sidebar-label">Name</label>
+                    <input type="text" class="form-control" @bind="editName" />
+                </div>
+                <div class="col-md-7">
+                    <label class="form-label sidebar-label">Description</label>
+                    <input type="text" class="form-control" @bind="editDescription" />
+                </div>
+            </div>
+            @if (editError is not null)
+            {
+                <div class="alert alert-danger py-2 small">@editError</div>
+            }
+            <div class="d-flex gap-2">
+                <button class="btn btn-primary" @onclick="SaveEditAsync">Save</button>
+                <button class="btn btn-outline-secondary" @onclick="CancelEdit">Cancel</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (workspaces.Count == 0 && !creating)
 {
     <div class="scry-card p-4 text-center text-muted">
         <i class="bi bi-diagram-3 fs-1 mb-3 d-block"></i>
-        <p>No workspaces yet. Create one via the API:</p>
-        <code class="font-mono">POST /api/workspaces</code>
+        <p>No workspaces yet. Use the <strong>New workspace</strong> button above.</p>
     </div>
 }
 else
@@ -28,29 +88,52 @@ else
         {
             var counts = statusCounts.GetValueOrDefault(ws.Id);
             <div class="col-md-6 col-lg-4">
-                <a href="/workspaces/@ws.Id" class="text-decoration-none">
-                    <div class="scry-card p-3 h-100" style="transition: border-color 0.15s; cursor:pointer;"
-                         onmouseover="this.style.borderColor='#0d6efd'" onmouseout="this.style.borderColor='#2d3039'">
-                        <div class="d-flex align-items-center mb-3">
-                            <i class="bi bi-diagram-3-fill text-primary me-2"></i>
-                            <span class="fw-semibold text-white">@ws.Name</span>
+                <div class="scry-card p-3 h-100">
+                    <div class="d-flex align-items-start justify-content-between mb-2">
+                        <a href="/workspaces/@ws.Id" class="text-decoration-none d-flex align-items-center gap-2 flex-grow-1">
+                            <i class="bi bi-diagram-3-fill text-primary"></i>
+                            <span class="fw-semibold">@ws.Name</span>
+                        </a>
+                        <div class="d-flex gap-1 ms-2">
+                            <button class="btn btn-sm btn-outline-secondary py-0 px-1"
+                                    @onclick="() => StartEdit(ws)" title="Edit">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            @if (confirmDeleteId == ws.Id)
+                            {
+                                <button class="btn btn-sm btn-danger py-0 px-1"
+                                        @onclick="() => DeleteAsync(ws.Id)" title="Confirm delete">
+                                    <i class="bi bi-check-lg"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary py-0 px-1"
+                                        @onclick="() => confirmDeleteId = null" title="Cancel">
+                                    <i class="bi bi-x"></i>
+                                </button>
+                            }
+                            else
+                            {
+                                <button class="btn btn-sm btn-outline-danger py-0 px-1"
+                                        @onclick="() => confirmDeleteId = ws.Id" title="Delete">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            }
                         </div>
-                        @if (!string.IsNullOrWhiteSpace(ws.Description))
-                        {
-                            <p class="text-muted small mb-3">@ws.Description</p>
-                        }
-                        @if (counts is not null)
-                        {
-                            <div class="d-flex gap-2 flex-wrap">
-                                @if (counts.Ok > 0)    { <span class="badge badge-ok">@counts.Ok Ok</span> }
-                                @if (counts.Warn > 0)  { <span class="badge badge-warn">@counts.Warn Warn</span> }
-                                @if (counts.Crit > 0)  { <span class="badge badge-crit">@counts.Crit Crit</span> }
-                                @if (counts.Error > 0) { <span class="badge badge-error">@counts.Error Error</span> }
-                                @if (counts.Total == 0){ <span class="text-muted small">No probes</span> }
-                            </div>
-                        }
                     </div>
-                </a>
+                    @if (!string.IsNullOrWhiteSpace(ws.Description))
+                    {
+                        <p class="text-muted small mb-2">@ws.Description</p>
+                    }
+                    @if (counts is not null)
+                    {
+                        <div class="d-flex gap-2 flex-wrap mt-auto">
+                            @if (counts.Ok > 0)    { <span class="badge badge-ok">@counts.Ok Ok</span> }
+                            @if (counts.Warn > 0)  { <span class="badge badge-warn">@counts.Warn Warn</span> }
+                            @if (counts.Crit > 0)  { <span class="badge badge-crit">@counts.Crit Crit</span> }
+                            @if (counts.Error > 0) { <span class="badge badge-error">@counts.Error Error</span> }
+                            @if (counts.Total == 0){ <span class="text-muted small">No probes</span> }
+                        </div>
+                    }
+                </div>
             </div>
         }
     </div>
@@ -60,14 +143,26 @@ else
     private List<Workspace> workspaces = [];
     private Dictionary<Guid, StatusCount> statusCounts = [];
 
-    protected override async Task OnInitializedAsync()
+    private bool creating;
+    private string newName = "";
+    private string newDescription = "";
+    private string? createError;
+
+    private Guid? editingId;
+    private string editName = "";
+    private string editDescription = "";
+    private string? editError;
+
+    private Guid? confirmDeleteId;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
     {
         await using var ctx = await DbFactory.CreateDbContextAsync();
         workspaces = await ctx.Workspaces.OrderBy(w => w.Name).ToListAsync();
 
         var workspaceIds = workspaces.Select(w => w.Id).ToHashSet();
-
-        // Single query across all workspaces — bypass the per-context workspace filter.
         var latestResults = await ctx.ProbeResults
             .IgnoreQueryFilters()
             .Where(r => workspaceIds.Contains(r.WorkspaceId))
@@ -77,16 +172,77 @@ else
 
         statusCounts = latestResults
             .GroupBy(r => r.WorkspaceId)
-            .ToDictionary(
-                g => g.Key,
-                g => new StatusCount
-                {
-                    Ok    = g.Count(r => r.Outcome == ProbeOutcome.Ok),
-                    Warn  = g.Count(r => r.Outcome == ProbeOutcome.Warn),
-                    Crit  = g.Count(r => r.Outcome == ProbeOutcome.Crit),
-                    Error = g.Count(r => r.Outcome == ProbeOutcome.Error),
-                    Total = g.Count(),
-                });
+            .ToDictionary(g => g.Key, g => new StatusCount
+            {
+                Ok    = g.Count(r => r.Outcome == ProbeOutcome.Ok),
+                Warn  = g.Count(r => r.Outcome == ProbeOutcome.Warn),
+                Crit  = g.Count(r => r.Outcome == ProbeOutcome.Crit),
+                Error = g.Count(r => r.Outcome == ProbeOutcome.Error),
+                Total = g.Count(),
+            });
+    }
+
+    private void CancelCreate()
+    {
+        creating = false;
+        newName = "";
+        newDescription = "";
+        createError = null;
+    }
+
+    private async Task CreateAsync()
+    {
+        if (string.IsNullOrWhiteSpace(newName)) { createError = "Name is required."; return; }
+        await using var ctx = await DbFactory.CreateDbContextAsync();
+        ctx.Workspaces.Add(new Workspace { Name = newName.Trim(), Description = newDescription.Trim() });
+        await ctx.SaveChangesAsync();
+        CancelCreate();
+        await LoadAsync();
+    }
+
+    private void StartEdit(Workspace ws)
+    {
+        editingId = ws.Id;
+        editName = ws.Name;
+        editDescription = ws.Description ?? "";
+        editError = null;
+        confirmDeleteId = null;
+    }
+
+    private void CancelEdit()
+    {
+        editingId = null;
+        editError = null;
+    }
+
+    private async Task SaveEditAsync()
+    {
+        if (string.IsNullOrWhiteSpace(editName)) { editError = "Name is required."; return; }
+        await using var ctx = await DbFactory.CreateDbContextAsync();
+        var ws = await ctx.Workspaces.FindAsync(editingId);
+        if (ws is null) return;
+        ws.Name = editName.Trim();
+        ws.Description = editDescription.Trim();
+        await ctx.SaveChangesAsync();
+        editingId = null;
+        await LoadAsync();
+    }
+
+    private async Task DeleteAsync(Guid id)
+    {
+        await using var ctx = await DbFactory.CreateDbContextAsync();
+        var ws = await ctx.Workspaces.FindAsync(id);
+        if (ws is not null)
+        {
+            ctx.Workspaces.Remove(ws);
+            await ctx.SaveChangesAsync();
+
+            // Purge orphaned jobs from MySQL — no cross-DB FK so this must be explicit.
+            await using var jobCtx = await JobDbFactory.CreateDbContextAsync();
+            await jobCtx.Jobs.Where(j => j.WorkspaceId == id).ExecuteDeleteAsync();
+        }
+        confirmDeleteId = null;
+        await LoadAsync();
     }
 
     private sealed record StatusCount
