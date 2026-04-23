@@ -144,14 +144,14 @@ internal sealed class SqlKpiProbeExecutor : IProbeExecutor
 
     private static ProbeResult Result(Probe probe, DateTimeOffset started, Stopwatch sw,
         ProbeOutcome outcome, string message, Dictionary<string, string> attrs) => new()
-    {
-        WorkspaceId = probe.WorkspaceId,
-        ProbeId = probe.Id,
-        Outcome = outcome,
-        Message = message,
-        DurationMs = sw.ElapsedMilliseconds,
-        StartedAt = started,
-        CompletedAt = DateTimeOffset.UtcNow,
-        Attributes = attrs,
-    };
+        {
+            WorkspaceId = probe.WorkspaceId,
+            ProbeId = probe.Id,
+            Outcome = outcome,
+            Message = message,
+            DurationMs = sw.ElapsedMilliseconds,
+            StartedAt = started,
+            CompletedAt = DateTimeOffset.UtcNow,
+            Attributes = attrs,
+        };
 }
