@@ -54,8 +54,8 @@ internal static class ResultEndpoints
 
             var sql = $$"""
                 SELECT
-                    date_trunc('minute', "CompletedAt" AT TIME ZONE 'UTC') -
-                        (EXTRACT(MINUTE FROM "CompletedAt" AT TIME ZONE 'UTC')::int % {{bucketMinutes}}) * interval '1 minute'
+                    date_trunc('minute', "CompletedAt") -
+                        (EXTRACT(MINUTE FROM "CompletedAt")::int % {{bucketMinutes}}) * interval '1 minute'
                         AS "Bucket",
                     COUNT(*) FILTER (WHERE "Outcome" = 'Ok')      AS "Ok",
                     COUNT(*) FILTER (WHERE "Outcome" = 'Warn')    AS "Warn",

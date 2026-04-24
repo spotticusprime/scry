@@ -710,6 +710,7 @@ code {
     border: 1px solid var(--border-dim);
     border-radius: var(--r-lg);
     overflow: hidden;
+    z-index: 1; /* own stacking context — Cytoscape canvases stay inside it */
 }
 
 .topology-empty {
@@ -736,7 +737,7 @@ code {
     padding: 5px 12px;
     font-size: 11px;
     color: var(--text-3);
-    z-index: 10;
+    z-index: 20;
     pointer-events: none;
 }
 
@@ -746,7 +747,7 @@ code {
     left: 14px;
     display: flex;
     gap: 8px;
-    z-index: 10;
+    z-index: 20;
 }
 
 .topology-fab {
@@ -790,7 +791,7 @@ code {
     -webkit-backdrop-filter: blur(18px);
     border: 1px solid var(--border-mid);
     border-radius: var(--r-lg);
-    z-index: 10;
+    z-index: 20;
     overflow: hidden;
     max-height: calc(100% - 28px);
     overflow-y: auto;

@@ -207,8 +207,8 @@
 
             var sql = $$"""
                 SELECT
-                    date_trunc('minute', "CompletedAt" AT TIME ZONE 'UTC') -
-                        (EXTRACT(MINUTE FROM "CompletedAt" AT TIME ZONE 'UTC')::int % {{bucketMinutes}}) * interval '1 minute'
+                    date_trunc('minute', "CompletedAt") -
+                        (EXTRACT(MINUTE FROM "CompletedAt")::int % {{bucketMinutes}}) * interval '1 minute'
                         AS "Bucket",
                     MODE() WITHIN GROUP (ORDER BY "Outcome") AS "Outcome",
                     AVG("DurationMs") AS "AvgDurationMs",
