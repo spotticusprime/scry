@@ -8,34 +8,80 @@
 
 <PageTitle>Topology — Scry</PageTitle>
 
-<div class="d-flex align-items-center justify-content-between mb-3">
+<div class="d-flex align-items-start justify-content-between mb-3">
     <div>
         <h1 class="page-title">Topology</h1>
-        <p class="page-subtitle mb-0">Asset dependency graph for this workspace</p>
-    </div>
-    <div class="d-flex gap-2">
-        <button class="btn btn-sm btn-outline-primary" @onclick="ShowAddAsset">
-            <i class="bi bi-plus-circle me-1"></i>Add asset
-        </button>
-        <button class="btn btn-sm btn-outline-secondary" @onclick="RefreshAsync">
-            <i class="bi bi-arrow-clockwise me-1"></i>Refresh
-        </button>
+        <p class="page-subtitle">Asset dependency graph · @(graphData?.Nodes.Count ?? 0) nodes, @(graphData?.Edges.Count ?? 0) edges</p>
     </div>
 </div>
 
-@if (addingAsset)
-{
-    <div class="scry-card mb-3">
-        <div class="scry-card-header"><i class="bi bi-plus-circle me-2"></i>Add asset</div>
-        <div class="p-4">
-            <div class="row g-3 mb-3">
-                <div class="col-md-4">
-                    <label class="form-label sidebar-label">Name</label>
-                    <input type="text" class="form-control" @bind="newName" placeholder="e.g. api-server" />
+<!-- Graph shell (full height, relative positioned so floating panels anchor to it) -->
+<div class="topology-shell" style="height:calc(100vh - 164px);min-height:460px;">
+
+    <!-- Full-bleed graph canvas -->
+    <div class="topology-graph">
+        <div id="topology-container" style="width:100%;height:100%;"></div>
+
+        @if (graphData is null)
+        {
+            <div class="topology-empty">
+                <div class="spinner-border spinner-border-sm" style="color:var(--text-3);"></div>
+                <span style="font-size:12px;">Loading…</span>
+            </div>
+        }
+        else if (graphData.Nodes.Count == 0)
+        {
+            <div class="topology-empty">
+                <i class="bi bi-diagram-3" style="font-size:2.4rem;opacity:0.25;"></i>
+                <span style="font-size:13px;">No assets yet</span>
+                <span style="font-size:12px;color:var(--text-3);">Use the button below to add your first asset</span>
+            </div>
+        }
+    </div>
+
+    <!-- Top-left hint (only when nodes exist) -->
+    @if (graphData?.Nodes.Count > 0)
+    {
+        <div class="topology-hint">
+            <i class="bi bi-cursor me-1"></i>Click a node to inspect
+        </div>
+    }
+
+    <!-- Bottom-left FAB toolbar -->
+    <div class="topology-toolbar">
+        <button class="topology-fab topology-fab-accent" @onclick="ToggleAddAsset">
+            <i class="bi @(addingAsset ? "bi-x-lg" : "bi-plus-circle")"></i>
+            @(addingAsset ? "Cancel" : "Add asset")
+        </button>
+        @if (graphData?.Nodes.Count > 0)
+        {
+            <button class="topology-fab" @onclick="ToggleAddRelationship">
+                <i class="bi @(addingRelationship ? "bi-x-lg" : "bi-diagram-3")"></i>
+                @(addingRelationship ? "Cancel" : "Add link")
+            </button>
+        }
+        <button class="topology-fab" @onclick="RefreshAsync">
+            <i class="bi bi-arrow-clockwise"></i>Refresh
+        </button>
+    </div>
+
+    <!-- Floating right panel: add-asset form | add-relationship form | node detail -->
+    @if (addingAsset)
+    {
+        <div class="topology-panel">
+            <div class="topology-panel-header">
+                <i class="bi bi-plus-circle" style="color:var(--accent);"></i>
+                <span>Add asset</span>
+            </div>
+            <div class="topology-panel-body">
+                <div class="mb-3">
+                    <span class="topology-panel-label">Name</span>
+                    <input type="text" class="form-control form-control-sm" @bind="newName"
+                           placeholder="e.g. api-server" autofocus />
                 </div>
-                <div class="col-md-3">
-                    <label class="form-label sidebar-label">Kind</label>
-                    <select class="form-select" @bind="newKind">
+                <div class="mb-3">
+                    <span class="topology-panel-label">Kind</span>
+                    <select class="form-select form-select-sm" @bind="newKind">
                         <option value="Unknown">Unknown</option>
                         <option value="Domain">Domain</option>
                         <option value="Host">Host / VM</option>
@@ -47,36 +93,36 @@
                         <option value="Network">Network</option>
                     </select>
                 </div>
-                <div class="col-md-5">
-                    <label class="form-label sidebar-label">External ID (optional)</label>
-                    <input type="text" class="form-control" @bind="newExternalId" placeholder="e.g. /subscriptions/..." />
+                <div class="mb-3">
+                    <span class="topology-panel-label">External ID (optional)</span>
+                    <input type="text" class="form-control form-control-sm" @bind="newExternalId"
+                           placeholder="/subscriptions/…" />
                 </div>
-            </div>
-            <div class="mb-3">
-                <label class="form-label sidebar-label">Description (optional)</label>
-                <input type="text" class="form-control" @bind="newDescription" />
-            </div>
-            @if (assetError is not null)
-            {
-                <div class="alert alert-danger py-2 small">@assetError</div>
-            }
-            <div class="d-flex gap-2">
-                <button class="btn btn-primary" @onclick="CreateAssetAsync">Create</button>
-                <button class="btn btn-outline-secondary" @onclick="() => addingAsset = false">Cancel</button>
+                <div class="mb-4">
+                    <span class="topology-panel-label">Description (optional)</span>
+                    <input type="text" class="form-control form-control-sm" @bind="newDescription" />
+                </div>
+                @if (assetError is not null)
+                {
+                    <div class="alert alert-danger py-2 small mb-3"><i class="bi bi-exclamation-triangle me-1"></i>@assetError</div>
+                }
+                <button class="btn btn-primary btn-sm w-100" @onclick="CreateAssetAsync">
+                    <i class="bi bi-check-lg"></i>Create asset
+                </button>
             </div>
         </div>
-    </div>
-}
-
-@if (addingRelationship)
-{
-    <div class="scry-card mb-3">
-        <div class="scry-card-header"><i class="bi bi-diagram-3 me-2"></i>Add relationship</div>
-        <div class="p-4">
-            <div class="row g-3 mb-3">
-                <div class="col-md-4">
-                    <label class="form-label sidebar-label">Source asset</label>
-                    <select class="form-select" @bind="relSourceId">
+    }
+    else if (addingRelationship)
+    {
+        <div class="topology-panel">
+            <div class="topology-panel-header">
+                <i class="bi bi-diagram-3" style="color:var(--accent);"></i>
+                <span>Add relationship</span>
+            </div>
+            <div class="topology-panel-body">
+                <div class="mb-3">
+                    <span class="topology-panel-label">Source</span>
+                    <select class="form-select form-select-sm" @bind="relSourceId">
                         <option value="">Select…</option>
                         @foreach (var a in allAssets)
                         {
@@ -84,9 +130,9 @@
                         }
                     </select>
                 </div>
-                <div class="col-md-3">
-                    <label class="form-label sidebar-label">Relationship</label>
-                    <select class="form-select" @bind="relKind">
+                <div class="mb-3">
+                    <span class="topology-panel-label">Relationship</span>
+                    <select class="form-select form-select-sm" @bind="relKind">
                         <option value="DependsOn">Depends on</option>
                         <option value="Hosts">Hosts</option>
                         <option value="Contains">Contains</option>
@@ -96,9 +142,9 @@
                         <option value="Owns">Owns</option>
                     </select>
                 </div>
-                <div class="col-md-4">
-                    <label class="form-label sidebar-label">Target asset</label>
-                    <select class="form-select" @bind="relTargetId">
+                <div class="mb-4">
+                    <span class="topology-panel-label">Target</span>
+                    <select class="form-select form-select-sm" @bind="relTargetId">
                         <option value="">Select…</option>
                         @foreach (var a in allAssets)
                         {
@@ -106,93 +152,76 @@
                         }
                     </select>
                 </div>
-            </div>
-            @if (relError is not null)
-            {
-                <div class="alert alert-danger py-2 small">@relError</div>
-            }
-            <div class="d-flex gap-2">
-                <button class="btn btn-primary" @onclick="CreateRelationshipAsync">Add</button>
-                <button class="btn btn-outline-secondary" @onclick="() => addingRelationship = false">Cancel</button>
+                @if (relError is not null)
+                {
+                    <div class="alert alert-danger py-2 small mb-3"><i class="bi bi-exclamation-triangle me-1"></i>@relError</div>
+                }
+                <button class="btn btn-primary btn-sm w-100" @onclick="CreateRelationshipAsync">
+                    <i class="bi bi-check-lg"></i>Add link
+                </button>
             </div>
         </div>
-    </div>
-}
-
-<div class="row g-3" style="height: calc(100vh - 280px); min-height: 400px;">
-    <div class="col-lg-9 h-100">
-        <div class="scry-card h-100">
-            @if (graphData is null)
-            {
-                <div class="p-4 text-center text-muted">Loading topology…</div>
-            }
-            else if (graphData.Nodes.Count == 0)
-            {
-                <div class="p-4 text-center text-muted">
-                    <i class="bi bi-diagram-3 fs-2 d-block mb-2"></i>
-                    No assets yet — add one above.
+    }
+    else if (selectedAsset is not null)
+    {
+        <div class="topology-panel">
+            <div class="topology-panel-header">
+                <span class="dot @ProbeDotClass(AssetHealth(selectedAsset.Id))"
+                      style="width:8px;height:8px;flex-shrink:0;"></span>
+                <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                    @selectedAsset.Name
+                </span>
+                <button class="btn btn-sm btn-outline-danger"
+                        style="padding:2px 6px;font-size:11px;border-radius:4px;"
+                        @onclick="() => DeleteAssetAsync(selectedAsset.Id)">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </div>
+            <div class="topology-panel-body">
+                <div class="mb-3">
+                    <span class="topology-panel-label">Kind</span>
+                    <p style="font-size:13px;margin:0;">@selectedAsset.Kind</p>
                 </div>
-            }
-            else
-            {
-                <div id="topology-container" style="width:100%;height:100%;"></div>
-            }
-        </div>
-    </div>
-    <div class="col-lg-3 h-100 overflow-auto">
-        @if (selectedAsset is not null)
-        {
-            <div class="scry-card mb-3">
-                <div class="scry-card-header d-flex justify-content-between align-items-center">
-                    <span><i class="bi bi-info-circle me-2"></i>@selectedAsset.Name</span>
-                    <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAssetAsync(selectedAsset.Id)">
-                        <i class="bi bi-trash"></i>
-                    </button>
-                </div>
-                <div class="p-3">
-                    <div class="sidebar-label">Kind</div>
-                    <p class="mb-2 small">@selectedAsset.Kind</p>
-                    @if (!string.IsNullOrEmpty(selectedAsset.ExternalId))
-                    {
-                        <div class="sidebar-label">External ID</div>
-                        <p class="mb-2 small font-mono">@selectedAsset.ExternalId</p>
-                    }
-                    @if (selectedAsset.Attributes.TryGetValue("description", out var desc))
-                    {
-                        <div class="sidebar-label">Description</div>
-                        <p class="mb-2 small">@desc</p>
-                    }
-                    @if (selectedProbes.Count > 0)
-                    {
-                        <div class="sidebar-label mt-2">Attached probes</div>
+                @if (!string.IsNullOrEmpty(selectedAsset.ExternalId))
+                {
+                    <div class="mb-3">
+                        <span class="topology-panel-label">External ID</span>
+                        <p class="font-mono" style="font-size:11.5px;margin:0;word-break:break-all;color:var(--text-2);">@selectedAsset.ExternalId</p>
+                    </div>
+                }
+                @if (selectedAsset.Attributes.TryGetValue("description", out var desc))
+                {
+                    <div class="mb-3">
+                        <span class="topology-panel-label">Description</span>
+                        <p style="font-size:12px;margin:0;color:var(--text-2);">@desc</p>
+                    </div>
+                }
+                @if (selectedProbes.Count > 0)
+                {
+                    <div class="mb-3">
+                        <span class="topology-panel-label">Attached probes</span>
                         @foreach (var p in selectedProbes)
                         {
                             <div class="d-flex align-items-center gap-2 mb-1">
-                                <span class="dot @ProbeDotClass(p.Outcome)" style="width:8px;height:8px;flex-shrink:0;"></span>
-                                <a href="/workspaces/@WorkspaceId/probes/@p.Id" class="small text-white text-decoration-none">@p.Name</a>
+                                <span class="dot @ProbeDotClass(p.Outcome)" style="width:7px;height:7px;flex-shrink:0;"></span>
+                                <a href="/workspaces/@WorkspaceId/probes/@p.Id"
+                                   style="font-size:12px;color:var(--text-1);text-decoration:none;">@p.Name</a>
                             </div>
                         }
-                    }
-                    <div class="mt-3">
-                        <button class="btn btn-sm btn-outline-secondary w-100" @onclick="ShowAddRelationship">
-                            <i class="bi bi-diagram-3 me-1"></i>Add relationship
-                        </button>
                     </div>
-                    <div class="mt-2">
-                        <a href="/workspaces/@WorkspaceId/assets/@selectedAsset.Id" class="btn btn-sm btn-outline-primary w-100">
-                            <i class="bi bi-box-arrow-up-right me-1"></i>Asset detail
-                        </a>
-                    </div>
+                }
+                <div class="d-flex gap-2 mt-3">
+                    <button class="btn btn-sm btn-outline-secondary flex-fill" @onclick="ShowAddRelationship">
+                        <i class="bi bi-diagram-3"></i>Link
+                    </button>
+                    <a href="/workspaces/@WorkspaceId/assets/@selectedAsset.Id"
+                       class="btn btn-sm btn-outline-primary flex-fill">
+                        <i class="bi bi-box-arrow-up-right"></i>Detail
+                    </a>
                 </div>
             </div>
-        }
-        else
-        {
-            <div class="scry-card p-3 text-muted small">
-                Click a node to see asset details.
-            </div>
-        }
-    </div>
+        </div>
+    }
 </div>
 
 @code {
@@ -219,9 +248,7 @@
     private DotNetObjectReference<Topology>? dotNetRef;
     private bool cytoscapeInitialized;
     private HubConnection? _hub;
-    // Maps probeId → assetId so incoming SignalR events can update the correct node.
     private Dictionary<Guid, Guid> _probeToAsset = [];
-    // Current health per asset for incremental SignalR updates.
     private Dictionary<Guid, ProbeOutcome?> _assetHealth = [];
 
     protected override async Task OnInitializedAsync()
@@ -242,19 +269,10 @@
         {
             if (evt.WorkspaceId != WorkspaceId) { return; }
             if (!_probeToAsset.TryGetValue(evt.ProbeId, out var assetId)) { return; }
-
             if (!Enum.TryParse<ProbeOutcome>(evt.Outcome, out var incoming)) { return; }
-
-            // Recompute asset health: incoming result may improve or worsen it.
-            // Re-query all probes for this asset to get the accurate worst outcome.
             _assetHealth[assetId] = incoming;
-            var health = _assetHealth[assetId]?.ToString();
-
-            // Update just this node's color without a full graph redraw.
             if (cytoscapeInitialized)
-            {
-                await JS.InvokeVoidAsync("ScryTopology.updateNodeHealth", assetId.ToString(), health);
-            }
+                await JS.InvokeVoidAsync("ScryTopology.updateNodeHealth", assetId.ToString(), incoming.ToString());
         });
 
         try
@@ -262,10 +280,7 @@
             await _hub.StartAsync();
             await _hub.InvokeAsync("JoinWorkspace", WorkspaceId.ToString());
         }
-        catch
-        {
-            // Hub is best-effort; topology page works without it.
-        }
+        catch { }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -301,9 +316,7 @@
 
         var resultByProbe = latestResults.ToDictionary(r => r.ProbeId, r => r.Outcome);
 
-        _probeToAsset = probes
-            .Where(p => p.AssetId.HasValue)
-            .ToDictionary(p => p.Id, p => p.AssetId!.Value);
+        _probeToAsset = probes.Where(p => p.AssetId.HasValue).ToDictionary(p => p.Id, p => p.AssetId!.Value);
 
         _assetHealth = new Dictionary<Guid, ProbeOutcome?>();
         foreach (var probe in probes)
@@ -312,24 +325,17 @@
             var assetId = probe.AssetId.Value;
             if (!resultByProbe.TryGetValue(probe.Id, out var outcome)) { continue; }
             if (!_assetHealth.TryGetValue(assetId, out var current) || current is null || WorstOutcome(outcome, current.Value))
-            {
                 _assetHealth[assetId] = outcome;
-            }
         }
 
         var relationships = await ctx.AssetRelationships.ToListAsync();
 
         var nodes = assets.Select(a => new GraphNode(
-            a.Id.ToString(),
-            a.Name,
-            a.Kind.ToString(),
+            a.Id.ToString(), a.Name, a.Kind.ToString(),
             _assetHealth.TryGetValue(a.Id, out var h) ? h?.ToString() : null)).ToList();
 
         var edges = relationships.Select(r => new GraphEdge(
-            r.Id.ToString(),
-            r.SourceAssetId.ToString(),
-            r.TargetAssetId.ToString(),
-            r.Kind.ToString())).ToList();
+            r.Id.ToString(), r.SourceAssetId.ToString(), r.TargetAssetId.ToString(), r.Kind.ToString())).ToList();
 
         graphData = new TopologyData(nodes, edges);
     }
@@ -346,10 +352,11 @@
         if (asset is null) { return; }
 
         selectedAsset = new AssetInfo(asset.Id, asset.Name, asset.Kind.ToString(), asset.ExternalId, asset.Attributes);
+        addingAsset = false;
+        addingRelationship = false;
 
         var probes = await ctx.Probes.Where(p => p.AssetId == id).ToListAsync();
         var probeIds = probes.Select(p => p.Id).ToList();
-
         var latestResults = await ctx.ProbeResults
             .Where(r => probeIds.Contains(r.ProbeId))
             .GroupBy(r => r.ProbeId)
@@ -357,39 +364,55 @@
             .ToListAsync();
 
         var resultMap = latestResults.ToDictionary(r => r.ProbeId, r => r.Outcome);
-        selectedProbes = probes.Select(p => new ProbeInfo(
-            p.Id, p.Name,
+        selectedProbes = probes.Select(p => new ProbeInfo(p.Id, p.Name,
             resultMap.TryGetValue(p.Id, out var o) ? (ProbeOutcome?)o : null)).ToList();
 
         await InvokeAsync(StateHasChanged);
     }
 
-    private void ShowAddAsset()
+    private void ToggleAddAsset()
     {
-        newName = "";
-        newKind = "Service";
-        newExternalId = "";
-        newDescription = "";
-        assetError = null;
-        addingAsset = true;
+        if (addingAsset)
+        {
+            addingAsset = false;
+        }
+        else
+        {
+            newName = ""; newKind = "Service"; newExternalId = ""; newDescription = ""; assetError = null;
+            addingAsset = true;
+            addingRelationship = false;
+            selectedAsset = null;
+        }
+    }
+
+    private void ToggleAddRelationship()
+    {
+        if (addingRelationship)
+        {
+            addingRelationship = false;
+        }
+        else
+        {
+            relSourceId = selectedAsset?.Id.ToString() ?? "";
+            relTargetId = ""; relKind = "DependsOn"; relError = null;
+            addingRelationship = true;
+            addingAsset = false;
+        }
     }
 
     private void ShowAddRelationship()
     {
         relSourceId = selectedAsset?.Id.ToString() ?? "";
-        relTargetId = "";
-        relKind = "DependsOn";
-        relError = null;
+        relTargetId = ""; relKind = "DependsOn"; relError = null;
         addingRelationship = true;
+        addingAsset = false;
+        selectedAsset = null;
     }
 
     private async Task CreateAssetAsync()
     {
-        if (string.IsNullOrWhiteSpace(newName))
-        {
-            assetError = "Name is required.";
-            return;
-        }
+        if (string.IsNullOrWhiteSpace(newName)) { assetError = "Name is required."; return; }
+
         await using var ctx = await DbFactory.CreateDbContextAsync();
         var asset = new Asset
         {
@@ -399,9 +422,8 @@
             ExternalId = string.IsNullOrWhiteSpace(newExternalId) ? null : newExternalId.Trim(),
         };
         if (!string.IsNullOrWhiteSpace(newDescription))
-        {
             asset.Attributes["description"] = newDescription.Trim();
-        }
+
         ctx.Assets.Add(asset);
         await ctx.SaveChangesAsync();
         addingAsset = false;
@@ -413,22 +435,19 @@
     {
         if (!Guid.TryParse(relSourceId, out var srcId) || !Guid.TryParse(relTargetId, out var tgtId))
         {
-            relError = "Select both source and target assets.";
-            return;
+            relError = "Select both source and target."; return;
         }
         if (!Enum.TryParse<RelationshipKind>(relKind, out var kind))
-        {
             kind = RelationshipKind.DependsOn;
-        }
+
         await using var ctx = await DbFactory.CreateDbContextAsync();
-        var rel = new AssetRelationship
+        ctx.AssetRelationships.Add(new AssetRelationship
         {
             WorkspaceId = WorkspaceId,
             SourceAssetId = srcId,
             TargetAssetId = tgtId,
             Kind = kind,
-        };
-        ctx.AssetRelationships.Add(rel);
+        });
         await ctx.SaveChangesAsync();
         addingRelationship = false;
         cytoscapeInitialized = false;
@@ -454,27 +473,30 @@
         await RefreshAsync();
     }
 
+    private ProbeOutcome? AssetHealth(Guid assetId) =>
+        _assetHealth.TryGetValue(assetId, out var h) ? h : null;
+
     private static bool WorstOutcome(ProbeOutcome incoming, ProbeOutcome current)
     {
         static int Rank(ProbeOutcome o) => o switch
         {
-            ProbeOutcome.Ok => 0,
+            ProbeOutcome.Ok      => 0,
             ProbeOutcome.Unknown => 1,
-            ProbeOutcome.Warn => 2,
-            ProbeOutcome.Crit => 3,
-            ProbeOutcome.Error => 4, // Error = probe couldn't run; worst because state is unknown
-            _ => 0,
+            ProbeOutcome.Warn    => 2,
+            ProbeOutcome.Crit    => 3,
+            ProbeOutcome.Error   => 4,
+            _                    => 0,
         };
         return Rank(incoming) > Rank(current);
     }
 
     private static string ProbeDotClass(ProbeOutcome? o) => o switch
     {
-        ProbeOutcome.Ok => "dot-ok",
-        ProbeOutcome.Warn => "dot-warn",
-        ProbeOutcome.Crit => "dot-crit",
+        ProbeOutcome.Ok    => "dot-ok",
+        ProbeOutcome.Warn  => "dot-warn",
+        ProbeOutcome.Crit  => "dot-crit",
         ProbeOutcome.Error => "dot-error",
-        _ => "dot-unknown",
+        _                  => "dot-unknown",
     };
 
     public async ValueTask DisposeAsync()

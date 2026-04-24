@@ -4,55 +4,60 @@
 
 <PageTitle>Alerts — Scry</PageTitle>
 
-<div class="d-flex align-items-center mb-4">
+<div class="d-flex align-items-start justify-content-between mb-4">
     <div>
         <h1 class="page-title">Alerts</h1>
-        <p class="page-subtitle mb-0">@rules.Count rule(s) · @firingCount firing</p>
+        <p class="page-subtitle">@rules.Count rule@(rules.Count != 1 ? "s" : "") · @firingCount firing</p>
     </div>
+    @if (firingCount > 0)
+    {
+        <span class="alert-firing" style="animation:none;">
+            <i class="bi bi-bell-fill"></i>@firingCount firing
+        </span>
+    }
 </div>
 
-<!-- Firing events -->
 @if (firingEvents.Count > 0)
 {
-    <div class="scry-card mb-4" style="border-color:#dc3545;">
-        <div class="scry-card-header text-danger"><i class="bi bi-bell-fill me-2"></i>Firing alerts</div>
-        <table class="table scry-table mb-0">
-            <thead>
-                <tr>
-                    <th>Alert rule</th>
-                    <th>Severity</th>
-                    <th>Probe</th>
-                    <th>Summary</th>
-                    <th>Opened</th>
-                    <th>Last notified</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var evt in firingEvents)
-                {
-                    <tr>
-                        <td class="text-white fw-medium">@(ruleMap.GetValueOrDefault(evt.AlertRuleId)?.Name ?? evt.AlertRuleId.ToString())</td>
-                        <td><span class="badge @SeverityBadge(evt.Severity)">@evt.Severity</span></td>
-                        <td class="text-muted font-mono small">@evt.Fingerprint.Split(':').LastOrDefault()</td>
-                        <td class="text-muted small">@evt.Summary</td>
-                        <td class="text-muted">@Ago(evt.OpenedAt)</td>
-                        <td class="text-muted">@(evt.LastNotifiedAt.HasValue ? Ago(evt.LastNotifiedAt.Value) : "—")</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
+    <div class="mb-4">
+        <div class="scry-card" style="border-color:rgba(248,113,113,0.25);">
+            <div class="scry-card-header" style="color:var(--crit);">
+                <i class="bi bi-bell-fill"></i>Firing alerts
+            </div>
+            @foreach (var evt in firingEvents)
+            {
+                <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border-dim);">
+                    <span class="dot dot-crit" style="width:8px;height:8px;flex-shrink:0;margin-top:4px;"></span>
+                    <div style="flex:1;min-width:0;">
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            <span style="font-weight:600;font-size:13px;">
+                                @(ruleMap.GetValueOrDefault(evt.AlertRuleId)?.Name ?? "Unknown rule")
+                            </span>
+                            <span class="badge @SeverityBadge(evt.Severity)">@evt.Severity</span>
+                        </div>
+                        <div style="font-size:12px;color:var(--text-3);">@(evt.Summary ?? "—")</div>
+                    </div>
+                    <div style="text-align:right;flex-shrink:0;min-width:100px;">
+                        <div style="font-size:12px;color:var(--text-3);">@Ago(evt.OpenedAt)</div>
+                        @if (evt.LastNotifiedAt.HasValue)
+                        {
+                            <div style="font-size:11px;color:var(--text-3);">notified @Ago(evt.LastNotifiedAt.Value)</div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
     </div>
 }
 
-<!-- Alert rules -->
 <div class="scry-card">
-    <div class="scry-card-header"><i class="bi bi-sliders me-2"></i>Rules</div>
+    <div class="scry-card-header"><i class="bi bi-sliders"></i>Rules</div>
     @if (rules.Count == 0)
     {
-        <div class="p-4 text-center text-muted">
-            <i class="bi bi-sliders fs-2 d-block mb-2"></i>
-            <p>No alert rules yet.</p>
-            <code class="font-mono">POST /api/workspaces/@WorkspaceId/alerts</code>
+        <div class="p-5 text-center" style="color:var(--text-3);">
+            <i class="bi bi-sliders" style="font-size:2rem;display:block;margin-bottom:10px;opacity:0.3;"></i>
+            <p style="margin-bottom:8px;">No alert rules yet.</p>
+            <code>POST /api/workspaces/@WorkspaceId/alerts</code>
         </div>
     }
     else
@@ -65,8 +70,8 @@
                     <th>Severity</th>
                     <th>Notifier</th>
                     <th>Probe filter</th>
-                    <th>Enabled</th>
-                    <th>Active events</th>
+                    <th>Status</th>
+                    <th>Firing</th>
                 </tr>
             </thead>
             <tbody>
@@ -74,19 +79,21 @@
                 {
                     var activeCount = firingEvents.Count(e => e.AlertRuleId == rule.Id);
                     <tr>
-                        <td class="fw-medium text-white">@rule.Name</td>
-                        <td><code class="font-mono text-info">@rule.Expression</code></td>
+                        <td style="font-weight:600;">@rule.Name</td>
+                        <td><code>@rule.Expression</code></td>
                         <td><span class="badge @SeverityBadge(rule.Severity)">@rule.Severity</span></td>
-                        <td class="text-muted small">@NotifierKind(rule.NotifierConfig)</td>
-                        <td class="text-muted small">@(rule.ProbeIdFilter.HasValue ? rule.ProbeIdFilter.Value.ToString()[..8] + "…" : "All probes")</td>
+                        <td style="font-size:12px;color:var(--text-3);">@NotifierKind(rule.NotifierConfig)</td>
+                        <td style="font-size:12px;color:var(--text-3);">
+                            @(rule.ProbeIdFilter.HasValue ? rule.ProbeIdFilter.Value.ToString()[..8] + "…" : "All probes")
+                        </td>
                         <td>
                             @if (rule.Enabled)
                             {
-                                <span class="badge bg-success bg-opacity-25 text-success">Active</span>
+                                <span class="badge badge-ok">Active</span>
                             }
                             else
                             {
-                                <span class="badge bg-secondary bg-opacity-25 text-secondary">Disabled</span>
+                                <span class="badge badge-unknown">Disabled</span>
                             }
                         </td>
                         <td>
@@ -96,7 +103,7 @@
                             }
                             else
                             {
-                                <span class="text-muted">—</span>
+                                <span style="color:var(--text-3);font-size:12px;">—</span>
                             }
                         </td>
                     </tr>
@@ -118,24 +125,18 @@
     {
         await using var ctx = await DbFactory.CreateDbContextAsync();
         ctx.CurrentWorkspaceId = WorkspaceId;
-
         rules = await ctx.AlertRules.OrderBy(r => r.Name).ToListAsync();
         ruleMap = rules.ToDictionary(r => r.Id);
-
-        firingEvents = await ctx.AlertEvents
-            .Where(e => e.State == AlertState.Firing)
-            .OrderByDescending(e => e.OpenedAt)
-            .ToListAsync();
-
+        firingEvents = await ctx.AlertEvents.Where(e => e.State == AlertState.Firing)
+            .OrderByDescending(e => e.OpenedAt).ToListAsync();
         firingCount = firingEvents.Count;
     }
 
     private static string SeverityBadge(AlertSeverity s) => s switch
     {
-        AlertSeverity.Critical => "badge-crit",
-        AlertSeverity.Error    => "badge-crit",
-        AlertSeverity.Warning  => "badge-warn",
-        _                      => "badge-unknown",
+        AlertSeverity.Critical or AlertSeverity.Error => "badge-crit",
+        AlertSeverity.Warning                         => "badge-warn",
+        _                                             => "badge-unknown",
     };
 
     private static string NotifierKind(string? config)

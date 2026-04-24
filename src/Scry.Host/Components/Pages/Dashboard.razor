@@ -7,113 +7,133 @@
 
 @if (workspace is null)
 {
-    <p class="text-muted">Workspace not found.</p>
+    <p style="color:var(--text-3)">Workspace not found.</p>
     return;
 }
 
-<div class="d-flex align-items-center justify-content-between mb-4">
+<div class="d-flex align-items-start justify-content-between mb-4">
     <div>
         <h1 class="page-title">@workspace.Name</h1>
-        <p class="page-subtitle mb-0">Last refreshed @refreshed.ToString("HH:mm:ss") UTC
-            — <a href="/workspaces/@WorkspaceId" class="text-muted">Refresh</a></p>
+        <p class="page-subtitle">
+            Updated @refreshed.ToString("HH:mm:ss") UTC ·
+            <a href="/workspaces/@WorkspaceId" style="color:var(--text-3);text-decoration:none;">Refresh</a>
+        </p>
     </div>
     @if (firingAlerts > 0)
     {
-        <a href="/workspaces/@WorkspaceId/alerts" class="badge badge-crit text-decoration-none fs-6 px-3 py-2">
-            <i class="bi bi-bell-fill me-1"></i> @firingAlerts firing
+        <a href="/workspaces/@WorkspaceId/alerts" class="alert-firing">
+            <i class="bi bi-bell-fill"></i>@firingAlerts firing
         </a>
     }
 </div>
 
-<!-- Status summary -->
+<!-- Health bar -->
+<div class="mb-4">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+        <span style="font-size:10.5px;color:var(--text-3);font-weight:600;text-transform:uppercase;letter-spacing:0.09em;">System health</span>
+        <span style="font-size:12px;color:var(--text-3);">@rows.Count probe@(rows.Count != 1 ? "s" : "")</span>
+    </div>
+    <div class="health-bar" style="height:4px;">
+        @{ int total = rows.Count; }
+        @if (total > 0)
+        {
+            @if (okCount > 0)    { <div class="health-seg health-seg-ok"   style="flex:@okCount"></div>    }
+            @if (warnCount > 0)  { <div class="health-seg health-seg-warn" style="flex:@warnCount"></div>  }
+            @if (critCount > 0)  { <div class="health-seg health-seg-crit" style="flex:@critCount"></div>  }
+            @if (errorCount > 0) { <div class="health-seg health-seg-err"  style="flex:@errorCount"></div> }
+        }
+        else
+        {
+            <div class="health-seg" style="flex:1;background:var(--surface-3)"></div>
+        }
+    </div>
+</div>
+
+<!-- Stat tiles -->
 <div class="row g-3 mb-4">
     <div class="col-6 col-md-3">
-        <div class="stat-card">
-            <div class="stat-value text-success">@okCount</div>
-            <div class="stat-label">Healthy</div>
+        <div class="stat-tile stat-tile-ok">
+            <div class="stat-tile-value text-ok">@okCount</div>
+            <div class="stat-tile-label">Healthy</div>
         </div>
     </div>
     <div class="col-6 col-md-3">
-        <div class="stat-card">
-            <div class="stat-value text-warning">@warnCount</div>
-            <div class="stat-label">Warning</div>
+        <div class="stat-tile stat-tile-warn">
+            <div class="stat-tile-value text-warn">@warnCount</div>
+            <div class="stat-tile-label">Warning</div>
         </div>
     </div>
     <div class="col-6 col-md-3">
-        <div class="stat-card">
-            <div class="stat-value text-danger">@critCount</div>
-            <div class="stat-label">Critical</div>
+        <div class="stat-tile stat-tile-crit">
+            <div class="stat-tile-value text-crit">@critCount</div>
+            <div class="stat-tile-label">Critical</div>
         </div>
     </div>
     <div class="col-6 col-md-3">
-        <div class="stat-card">
-            <div class="stat-value text-secondary">@errorCount</div>
-            <div class="stat-label">Error</div>
+        <div class="stat-tile stat-tile-err">
+            <div class="stat-tile-value text-error">@errorCount</div>
+            <div class="stat-tile-label">Error / Unknown</div>
         </div>
     </div>
 </div>
 
-<!-- Probe grid -->
+<!-- Probe feed -->
 <div class="scry-card">
-    <div class="scry-card-header d-flex align-items-center justify-content-between">
-        <span><i class="bi bi-broadcast me-2"></i>Probes (@rows.Count)</span>
-        <a href="/workspaces/@WorkspaceId/probes" class="text-muted small text-decoration-none">View all →</a>
+    <div class="scry-card-header">
+        <i class="bi bi-broadcast"></i>
+        Probes (@rows.Count)
+        <div class="ms-auto">
+            <a href="/workspaces/@WorkspaceId/probes" style="font-size:11px;color:var(--text-3);text-decoration:none;font-weight:500;">
+                Manage →
+            </a>
+        </div>
     </div>
+
     @if (rows.Count == 0)
     {
-        <div class="p-4 text-center text-muted">
-            <i class="bi bi-broadcast fs-2 d-block mb-2"></i>
-            No probes yet — <a href="/workspaces/@WorkspaceId/probes">create one</a>
+        <div class="p-5 text-center" style="color:var(--text-3);">
+            <i class="bi bi-broadcast" style="font-size:2rem;display:block;margin-bottom:10px;opacity:0.4;"></i>
+            No probes yet — <a href="/workspaces/@WorkspaceId/probes" style="color:var(--accent);">create one</a>
         </div>
     }
     else
     {
-        <table class="table scry-table mb-0">
-            <thead>
-                <tr>
-                    <th style="width:14px"></th>
-                    <th>Probe</th>
-                    <th>Kind</th>
-                    <th>Status</th>
-                    <th>24h trend</th>
-                    <th>Message</th>
-                    <th>Last run</th>
-                    <th>Duration</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var row in rows.OrderBy(r => r.Outcome).ThenBy(r => r.Name))
-                {
-                    <tr>
-                        <td><span class="dot @DotClass(row.Outcome)"></span></td>
-                        <td>
-                            <a href="/workspaces/@WorkspaceId/probes/@row.ProbeId"
-                               class="text-white text-decoration-none fw-medium">@row.Name</a>
-                        </td>
-                        <td><span class="text-muted font-mono">@row.Kind</span></td>
-                        <td><span class="badge @BadgeClass(row.Outcome)">@row.Outcome</span></td>
-                        <td style="width:100px;padding:4px 8px;">
-                            @if (sparklines.TryGetValue(row.ProbeId, out var pts) && pts.Count > 0)
-                            {
-                                <ApexChart TItem="SparkPoint" Options="sparkOptions" Height="40" Width="100">
-                                    <ApexPointSeries TItem="SparkPoint"
-                                        Items="pts"
-                                        SeriesType="SeriesType.Area"
-                                        XValue="p => p.X"
-                                        YValue="p => p.Y"
-                                        Color="@SparkColor(row.Outcome)" />
-                                </ApexChart>
-                            }
-                        </td>
-                        <td class="text-muted" style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-                            @row.Message
-                        </td>
-                        <td class="text-muted">@Ago(row.CompletedAt)</td>
-                        <td class="text-muted">@row.DurationMs ms</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
+        @foreach (var row in rows.OrderBy(r => OutcomeOrder(r.Outcome)).ThenBy(r => r.Name))
+        {
+            <a href="/workspaces/@WorkspaceId/probes/@row.ProbeId"
+               class="probe-row probe-row-@OutcomeSlug(row.Outcome)">
+                <span class="dot @DotClass(row.Outcome)" style="width:9px;height:9px;flex-shrink:0;"></span>
+                <div style="flex:1;min-width:0;">
+                    <div class="d-flex align-items-center gap-2">
+                        <span style="font-weight:600;font-size:13px;color:var(--text-1);">@row.Name</span>
+                        <span class="font-mono" style="font-size:10.5px;color:var(--text-3);">@row.Kind</span>
+                    </div>
+                    <div style="font-size:12px;color:var(--text-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:480px;">
+                        @(string.IsNullOrEmpty(row.Message) ? "—" : row.Message)
+                    </div>
+                </div>
+                <div class="d-flex align-items-center gap-3 flex-shrink-0">
+                    @if (sparklines.TryGetValue(row.ProbeId, out var pts) && pts.Count > 0)
+                    {
+                        <div style="width:72px;">
+                            <ApexChart TItem="SparkPoint" Options="sparkOptions" Height="32" Width="72">
+                                <ApexPointSeries TItem="SparkPoint"
+                                    Items="pts"
+                                    SeriesType="SeriesType.Area"
+                                    XValue="p => p.X"
+                                    YValue="p => p.Y"
+                                    Color="@SparkColor(row.Outcome)" />
+                            </ApexChart>
+                        </div>
+                    }
+                    <span class="badge @BadgeClass(row.Outcome)" style="min-width:52px;justify-content:center;">@row.Outcome</span>
+                    <div style="text-align:right;min-width:52px;">
+                        <div style="font-size:12px;color:var(--text-3);">@Ago(row.CompletedAt)</div>
+                        <div style="font-size:11px;color:var(--text-3);">@row.DurationMs ms</div>
+                    </div>
+                </div>
+            </a>
+        }
     }
 </div>
 
@@ -157,38 +177,23 @@
 
         rows = latestResults
             .Where(r => probeMap.ContainsKey(r.ProbeId))
-            .Select(r => new ProbeRow(
-                r.ProbeId,
-                probeMap[r.ProbeId].Name,
-                probeMap[r.ProbeId].Kind,
-                r.Outcome,
-                r.Message ?? "",
-                r.CompletedAt,
-                r.DurationMs))
+            .Select(r => new ProbeRow(r.ProbeId, probeMap[r.ProbeId].Name, probeMap[r.ProbeId].Kind,
+                r.Outcome, r.Message ?? "", r.CompletedAt, r.DurationMs))
             .ToList();
 
-        // Add probes with no results yet
         var probedIds = rows.Select(r => r.ProbeId).ToHashSet();
         foreach (var p in probes.Where(p => !probedIds.Contains(p.Id)))
-        {
-            rows.Add(new ProbeRow(p.Id, p.Name, p.Kind, ProbeOutcome.Unknown,
-                "No results yet", DateTimeOffset.MinValue, 0));
-        }
+            rows.Add(new ProbeRow(p.Id, p.Name, p.Kind, ProbeOutcome.Unknown, "No results yet", DateTimeOffset.MinValue, 0));
 
         okCount    = rows.Count(r => r.Outcome == ProbeOutcome.Ok);
         warnCount  = rows.Count(r => r.Outcome == ProbeOutcome.Warn);
         critCount  = rows.Count(r => r.Outcome == ProbeOutcome.Crit);
         errorCount = rows.Count(r => r.Outcome is ProbeOutcome.Error or ProbeOutcome.Unknown);
 
-        firingAlerts = await ctx.AlertEvents
-            .Where(e => e.State == AlertState.Firing)
-            .CountAsync();
-
+        firingAlerts = await ctx.AlertEvents.Where(e => e.State == AlertState.Firing).CountAsync();
         refreshed = DateTimeOffset.UtcNow;
 
-        // Load sparklines in parallel for all probes.
-        var sparkTasks = rows.Select(r => LoadSparkAsync(r.ProbeId)).ToList();
-        await Task.WhenAll(sparkTasks);
+        await Task.WhenAll(rows.Select(r => LoadSparkAsync(r.ProbeId)));
     }
 
     private async Task LoadSparkAsync(Guid probeId)
@@ -197,7 +202,6 @@
         {
             await using var ctx = await DbFactory.CreateDbContextAsync();
             ctx.CurrentWorkspaceId = WorkspaceId;
-
             var from = DateTimeOffset.UtcNow.AddHours(-24);
             const int bucketMinutes = 60;
 
@@ -210,28 +214,15 @@
                     AVG("DurationMs") AS "AvgDurationMs",
                     COUNT(*) AS "Count"
                 FROM "ProbeResults"
-                WHERE "ProbeId" = {0}
-                  AND "WorkspaceId" = {1}
-                  AND "CompletedAt" >= {2}
-                GROUP BY "Bucket"
-                ORDER BY "Bucket"
+                WHERE "ProbeId" = {0} AND "WorkspaceId" = {1} AND "CompletedAt" >= {2}
+                GROUP BY "Bucket" ORDER BY "Bucket"
                 """;
 
-            var rows = await ctx.Database
-                .SqlQueryRaw<TsRow>(sql, probeId, WorkspaceId, from)
-                .ToListAsync();
-
-            if (rows.Count > 0)
-            {
-                sparklines[probeId] = rows
-                    .Select(r => new SparkPoint(r.Bucket.ToUnixTimeMilliseconds(), OutcomeRank(r.Outcome)))
-                    .ToList();
-            }
+            var dbRows = await ctx.Database.SqlQueryRaw<TsRow>(sql, probeId, WorkspaceId, from).ToListAsync();
+            if (dbRows.Count > 0)
+                sparklines[probeId] = dbRows.Select(r => new SparkPoint(r.Bucket.ToUnixTimeMilliseconds(), OutcomeRank(r.Outcome))).ToList();
         }
-        catch
-        {
-            // sparkline failure is non-critical
-        }
+        catch { }
     }
 
     private sealed class TsRow
@@ -242,56 +233,67 @@
         public long Count { get; set; }
     }
 
+    private static int OutcomeOrder(ProbeOutcome o) => o switch
+    {
+        ProbeOutcome.Crit    => 0,
+        ProbeOutcome.Error   => 1,
+        ProbeOutcome.Warn    => 2,
+        ProbeOutcome.Unknown => 3,
+        _                    => 4,
+    };
+
+    private static string OutcomeSlug(ProbeOutcome o) => o switch
+    {
+        ProbeOutcome.Ok    => "ok",
+        ProbeOutcome.Warn  => "warn",
+        ProbeOutcome.Crit  => "crit",
+        ProbeOutcome.Error => "error",
+        _                  => "unknown",
+    };
+
     private static string DotClass(ProbeOutcome o) => o switch
     {
-        ProbeOutcome.Ok      => "dot-ok",
-        ProbeOutcome.Warn    => "dot-warn",
-        ProbeOutcome.Crit    => "dot-crit",
-        ProbeOutcome.Error   => "dot-error",
-        _                    => "dot-unknown",
+        ProbeOutcome.Ok    => "dot-ok",
+        ProbeOutcome.Warn  => "dot-warn",
+        ProbeOutcome.Crit  => "dot-crit",
+        ProbeOutcome.Error => "dot-error",
+        _                  => "dot-unknown",
     };
 
     private static string BadgeClass(ProbeOutcome o) => o switch
     {
-        ProbeOutcome.Ok      => "badge-ok",
-        ProbeOutcome.Warn    => "badge-warn",
-        ProbeOutcome.Crit    => "badge-crit",
-        ProbeOutcome.Error   => "badge-error",
-        _                    => "badge-unknown",
+        ProbeOutcome.Ok    => "badge-ok",
+        ProbeOutcome.Warn  => "badge-warn",
+        ProbeOutcome.Crit  => "badge-crit",
+        ProbeOutcome.Error => "badge-error",
+        _                  => "badge-unknown",
     };
 
     private static string Ago(DateTimeOffset t)
     {
         if (t == DateTimeOffset.MinValue) return "—";
         var diff = DateTimeOffset.UtcNow - t;
-        return diff.TotalMinutes < 1   ? $"{(int)diff.TotalSeconds}s ago"
-             : diff.TotalHours < 1     ? $"{(int)diff.TotalMinutes}m ago"
-             : diff.TotalDays < 1      ? $"{(int)diff.TotalHours}h ago"
+        return diff.TotalMinutes < 1  ? $"{(int)diff.TotalSeconds}s ago"
+             : diff.TotalHours < 1    ? $"{(int)diff.TotalMinutes}m ago"
+             : diff.TotalDays < 1     ? $"{(int)diff.TotalHours}h ago"
              : t.ToString("MMM d");
     }
 
     private static int OutcomeRank(string outcome) => outcome switch
     {
-        "Ok" => 1,
-        "Warn" => 2,
-        "Error" => 3,
-        "Crit" => 4,
-        _ => 0,
+        "Ok"   => 1, "Warn" => 2, "Error" => 3, "Crit" => 4, _ => 0,
     };
 
     private static string SparkColor(ProbeOutcome o) => o switch
     {
-        ProbeOutcome.Ok => "#198754",
-        ProbeOutcome.Warn => "#ffc107",
-        ProbeOutcome.Crit => "#dc3545",
-        ProbeOutcome.Error => "#dc3545",
-        _ => "#6c757d",
+        ProbeOutcome.Ok    => "#34d399",
+        ProbeOutcome.Warn  => "#fbbf24",
+        ProbeOutcome.Crit  => "#f87171",
+        ProbeOutcome.Error => "#a78bfa",
+        _                  => "#4b5563",
     };
 
-    private sealed record ProbeRow(
-        Guid ProbeId, string Name, string Kind,
-        ProbeOutcome Outcome, string Message,
-        DateTimeOffset CompletedAt, long DurationMs);
-
+    private sealed record ProbeRow(Guid ProbeId, string Name, string Kind, ProbeOutcome Outcome,
+        string Message, DateTimeOffset CompletedAt, long DurationMs);
     private sealed record SparkPoint(long X, int Y);
 }

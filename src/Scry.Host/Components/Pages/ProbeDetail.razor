@@ -7,37 +7,41 @@
 
 @if (probe is null)
 {
-    <p class="text-muted">Probe not found.</p>
+    <p style="color:var(--text-3)">Probe not found.</p>
     return;
 }
 
-<div class="d-flex align-items-center mb-1">
-    <a href="/workspaces/@WorkspaceId/probes" class="text-muted text-decoration-none small me-2">
-        <i class="bi bi-arrow-left"></i> Probes
-    </a>
-</div>
+<!-- Back link -->
+<a href="/workspaces/@WorkspaceId/probes"
+   style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-3);text-decoration:none;margin-bottom:12px;">
+    <i class="bi bi-arrow-left"></i> Probes
+</a>
 
-<div class="d-flex align-items-center justify-content-between mb-4">
+<!-- Header -->
+<div class="d-flex align-items-start justify-content-between mb-4">
     <div class="d-flex align-items-center gap-3">
-        <span class="dot @DotClass(latestOutcome)" style="width:14px;height:14px;"></span>
+        <span class="dot @DotClass(latestOutcome)" style="width:14px;height:14px;flex-shrink:0;"></span>
         <div>
             <h1 class="page-title">@probe.Name</h1>
-            <p class="page-subtitle mb-0">@probe.Kind · every @probe.Interval
-                · @(probe.Enabled ? "Active" : "Paused")</p>
+            <p class="page-subtitle">
+                <span class="font-mono">@probe.Kind</span> ·
+                every @probe.Interval ·
+                @(probe.Enabled ? "Active" : "Paused")
+            </p>
         </div>
     </div>
     <div class="d-flex align-items-center gap-2">
         @if (latestOutcome.HasValue)
         {
-            <span class="badge @BadgeClass(latestOutcome.Value) fs-6 px-3 py-2">@latestOutcome</span>
+            <span class="badge @BadgeClass(latestOutcome.Value)" style="font-size:12px;padding:5px 12px;">@latestOutcome</span>
         }
         @if (!editing && !confirmDelete)
         {
             <button class="btn btn-sm btn-outline-secondary" @onclick="StartEdit">
-                <i class="bi bi-pencil me-1"></i>Edit
+                <i class="bi bi-pencil"></i>Edit
             </button>
             <button class="btn btn-sm btn-outline-danger" @onclick="() => confirmDelete = true">
-                <i class="bi bi-trash me-1"></i>Delete
+                <i class="bi bi-trash"></i>Delete
             </button>
         }
     </div>
@@ -45,11 +49,15 @@
 
 @if (confirmDelete)
 {
-    <div class="scry-card p-4 mb-4 border-danger">
-        <p class="mb-3">Delete <strong>@probe.Name</strong>? This removes the probe and all its history. This cannot be undone.</p>
+    <div class="scry-card p-4 mb-4" style="border-color:rgba(248,113,113,0.3);">
+        <p style="font-size:13px;margin-bottom:14px;">
+            Delete <strong>@probe.Name</strong>? This removes the probe and all its history and cannot be undone.
+        </p>
         <div class="d-flex gap-2">
-            <button class="btn btn-danger" @onclick="DeleteAsync">Yes, delete</button>
-            <button class="btn btn-secondary" @onclick="() => confirmDelete = false">Cancel</button>
+            <button class="btn btn-danger btn-sm" @onclick="DeleteAsync">
+                <i class="bi bi-trash"></i>Delete
+            </button>
+            <button class="btn btn-outline-secondary btn-sm" @onclick="() => confirmDelete = false">Cancel</button>
         </div>
     </div>
 }
@@ -57,85 +65,133 @@
 @if (editing)
 {
     <div class="scry-card mb-4">
-        <div class="scry-card-header"><i class="bi bi-pencil me-2"></i>Edit probe</div>
+        <div class="scry-card-header"><i class="bi bi-pencil"></i>Edit probe</div>
         <div class="p-4">
             <div class="row g-3 mb-3">
                 <div class="col-md-6">
-                    <label class="form-label sidebar-label">Name</label>
+                    <label class="form-label">Name</label>
                     <input type="text" class="form-control" @bind="editName" />
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label sidebar-label">Interval (HH:MM:SS)</label>
+                    <label class="form-label">Interval (HH:MM:SS)</label>
                     <input type="text" class="form-control font-mono" @bind="editInterval" placeholder="00:05:00" />
                 </div>
-                <div class="col-md-3 d-flex align-items-end">
-                    <div class="form-check form-switch mb-2">
+                <div class="col-md-3 d-flex align-items-end pb-1">
+                    <div class="form-check form-switch">
                         <input class="form-check-input" type="checkbox" id="enabledSwitch" @bind="editEnabled" />
-                        <label class="form-check-label" for="enabledSwitch">Enabled</label>
+                        <label class="form-check-label" for="enabledSwitch" style="font-size:13px;">Enabled</label>
                     </div>
                 </div>
             </div>
             <div class="mb-3">
-                <label class="form-label sidebar-label">Definition (YAML)</label>
-                <textarea class="form-control font-mono" rows="14" @bind="editDefinition"></textarea>
+                <label class="form-label">Definition (YAML)</label>
+                <textarea class="form-control" rows="13" @bind="editDefinition"></textarea>
             </div>
             @if (saveError is not null)
             {
-                <div class="alert alert-danger py-2 small">@saveError</div>
+                <div class="alert alert-danger py-2 small mb-3"><i class="bi bi-exclamation-triangle me-1"></i>@saveError</div>
             }
             <div class="d-flex gap-2">
-                <button class="btn btn-primary" @onclick="SaveAsync">Save changes</button>
-                <button class="btn btn-outline-secondary" @onclick="CancelEdit">Cancel</button>
+                <button class="btn btn-primary btn-sm" @onclick="SaveAsync"><i class="bi bi-check-lg"></i>Save</button>
+                <button class="btn btn-outline-secondary btn-sm" @onclick="CancelEdit">Cancel</button>
             </div>
         </div>
     </div>
 }
 
-<div class="row g-3 mb-4">
-    @if (results.Count > 0)
-    {
-        var latest = results[0];
+<!-- Latest result stats -->
+@if (results.Count > 0)
+{
+    var latest = results[0];
+    <div class="row g-3 mb-4">
         <div class="col-md-4">
             <div class="scry-card p-3">
-                <div class="sidebar-label">Latest message</div>
-                <p class="mb-0 small">@latest.Message</p>
+                <span class="sidebar-label">Latest message</span>
+                <p style="font-size:13px;margin:0;color:var(--text-2);">@(latest.Message ?? "—")</p>
             </div>
         </div>
         <div class="col-md-4">
             <div class="scry-card p-3">
-                <div class="sidebar-label">Last run</div>
-                <p class="mb-0 small">@latest.CompletedAt.ToString("yyyy-MM-dd HH:mm:ss") UTC</p>
+                <span class="sidebar-label">Last run</span>
+                <p style="font-size:13px;margin:0;color:var(--text-2);">
+                    @latest.CompletedAt.ToString("yyyy-MM-dd HH:mm:ss") UTC
+                </p>
             </div>
         </div>
         <div class="col-md-4">
             <div class="scry-card p-3">
-                <div class="sidebar-label">Duration</div>
-                <p class="mb-0 small">@latest.DurationMs ms</p>
+                <span class="sidebar-label">Duration</span>
+                <p style="font-size:22px;font-weight:700;letter-spacing:-0.5px;margin:0;color:var(--text-1);">
+                    @latest.DurationMs <span style="font-size:13px;font-weight:400;color:var(--text-3);">ms</span>
+                </p>
             </div>
         </div>
-    }
-</div>
+    </div>
+}
 
+<!-- Timeseries chart -->
+@if (timeseriesPoints.Count > 0)
+{
+    <div class="scry-card mb-4">
+        <div class="scry-card-header"><i class="bi bi-graph-up"></i>24h trend</div>
+        <div class="p-3">
+            <ApexChart TItem="TsPoint" Title="" Height="200" Options="chartOptions">
+                <ApexPointSeries TItem="TsPoint"
+                    Items="timeseriesPoints"
+                    Name="Ok"
+                    SeriesType="SeriesType.Bar"
+                    XValue="p => p.Bucket.ToUnixTimeMilliseconds()"
+                    YValue="p => p.Ok"
+                    Color="#34d399" />
+                <ApexPointSeries TItem="TsPoint"
+                    Items="timeseriesPoints"
+                    Name="Warn"
+                    SeriesType="SeriesType.Bar"
+                    XValue="p => p.Bucket.ToUnixTimeMilliseconds()"
+                    YValue="p => p.Warn"
+                    Color="#fbbf24" />
+                <ApexPointSeries TItem="TsPoint"
+                    Items="timeseriesPoints"
+                    Name="Crit"
+                    SeriesType="SeriesType.Bar"
+                    XValue="p => p.Bucket.ToUnixTimeMilliseconds()"
+                    YValue="p => p.Crit"
+                    Color="#f87171" />
+                <ApexPointSeries TItem="TsPoint"
+                    Items="timeseriesPoints"
+                    Name="Error"
+                    SeriesType="SeriesType.Bar"
+                    XValue="p => p.Bucket.ToUnixTimeMilliseconds()"
+                    YValue="p => p.Error"
+                    Color="#a78bfa" />
+            </ApexChart>
+        </div>
+    </div>
+}
+
+<!-- Definition -->
 @if (!editing)
 {
-    <div class="scry-card mb-3">
-        <div class="scry-card-header"><i class="bi bi-code me-2"></i>Definition (YAML)</div>
-        <pre class="p-3 mb-0 font-mono" style="font-size:0.8rem;white-space:pre-wrap;word-break:break-all;">@probe.Definition</pre>
+    <div class="scry-card mb-4">
+        <div class="scry-card-header"><i class="bi bi-code"></i>Definition (YAML)</div>
+        <pre style="margin:0;border:none;border-radius:0 0 12px 12px;">@probe.Definition</pre>
     </div>
 }
 
+<!-- Attributes from latest run -->
 @if (results.Count > 0 && results[0].Attributes.Count > 0)
 {
-    <div class="scry-card mb-3">
-        <div class="scry-card-header"><i class="bi bi-tags me-2"></i>Attributes (latest run)</div>
+    <div class="scry-card mb-4">
+        <div class="scry-card-header"><i class="bi bi-tags"></i>Attributes (latest run)</div>
         <div class="p-3">
             <div class="row g-2">
                 @foreach (var (k, v) in results[0].Attributes)
                 {
                     <div class="col-md-6">
-                        <div class="d-flex justify-content-between small">
-                            <span class="text-muted font-mono">@k</span>
-                            <span class="font-mono">@v</span>
+                        <div class="d-flex justify-content-between align-items-center"
+                             style="font-size:12px;padding:5px 10px;background:var(--surface-2);border-radius:6px;">
+                            <span class="font-mono" style="color:var(--text-3);">@k</span>
+                            <span class="font-mono" style="color:var(--text-2);">@v</span>
                         </div>
                     </div>
                 }
@@ -144,64 +200,35 @@
     </div>
 }
 
-@if (timeseriesPoints.Count > 0)
-{
-    <div class="scry-card mb-3">
-        <div class="scry-card-header"><i class="bi bi-graph-up me-2"></i>24h trend</div>
-        <div class="p-3">
-            <ApexChart TItem="TimeseriesPoint" Title="" Height="220" Options="chartOptions">
-                <ApexPointSeries TItem="TimeseriesPoint"
-                    Items="timeseriesPoints"
-                    Name="Duration (ms)"
-                    SeriesType="SeriesType.Line"
-                    XValue="p => p.Bucket.ToUnixTimeMilliseconds()"
-                    YValue="p => (decimal)p.AvgDurationMs"
-                    Color="#0d6efd" />
-                <ApexPointSeries TItem="TimeseriesPoint"
-                    Items="timeseriesPoints"
-                    Name="Outcome"
-                    SeriesType="SeriesType.Area"
-                    XValue="p => p.Bucket.ToUnixTimeMilliseconds()"
-                    YValue="p => (decimal)OutcomeRank(p.Outcome)"
-                    Color="#198754" />
-            </ApexChart>
-        </div>
-    </div>
-}
-
+<!-- Result history -->
 <div class="scry-card">
-    <div class="scry-card-header"><i class="bi bi-clock-history me-2"></i>Result history (last 100)</div>
+    <div class="scry-card-header"><i class="bi bi-clock-history"></i>History (last 100)</div>
     @if (results.Count == 0)
     {
-        <div class="p-4 text-center text-muted">No results yet — probe has not run.</div>
+        <div class="p-4 text-center" style="color:var(--text-3);font-size:13px;">No results yet — probe has not run.</div>
     }
     else
     {
-        <table class="table scry-table mb-0">
-            <thead>
-                <tr>
-                    <th style="width:14px"></th>
-                    <th>Outcome</th>
-                    <th>Message</th>
-                    <th>Completed</th>
-                    <th>Duration</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var r in results)
-                {
-                    <tr>
-                        <td><span class="dot @DotClass(r.Outcome)"></span></td>
-                        <td><span class="badge @BadgeClass(r.Outcome)">@r.Outcome</span></td>
-                        <td class="text-muted" style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-                            @r.Message
-                        </td>
-                        <td class="text-muted">@r.CompletedAt.ToString("yyyy-MM-dd HH:mm:ss") UTC</td>
-                        <td class="text-muted">@r.DurationMs ms</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
+        <div style="padding:0 16px;">
+            @foreach (var r in results)
+            {
+                <div class="result-row">
+                    <span class="dot @DotClass(r.Outcome)" style="width:8px;height:8px;margin-top:3px;flex-shrink:0;"></span>
+                    <span class="badge @BadgeClass(r.Outcome)" style="flex-shrink:0;">@r.Outcome</span>
+                    <div style="flex:1;min-width:0;">
+                        <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-2);font-size:12.5px;">
+                            @(r.Message ?? "—")
+                        </div>
+                    </div>
+                    <div style="text-align:right;flex-shrink:0;min-width:140px;">
+                        <div style="font-size:12px;color:var(--text-3);">
+                            @r.CompletedAt.ToString("MM-dd HH:mm:ss")
+                        </div>
+                        <div style="font-size:11px;color:var(--text-3);">@r.DurationMs ms</div>
+                    </div>
+                </div>
+            }
+        </div>
     }
 </div>
 
@@ -212,21 +239,34 @@
     private Probe? probe;
     private List<ProbeResult> results = [];
     private ProbeOutcome? latestOutcome;
-    private List<TimeseriesPoint> timeseriesPoints = [];
-    private ApexChartOptions<TimeseriesPoint> chartOptions = new()
+    private List<TsPoint> timeseriesPoints = [];
+
+    private readonly ApexChartOptions<TsPoint> chartOptions = new()
     {
-        Chart = new Chart { Toolbar = new Toolbar { Show = false }, Background = "transparent" },
+        Chart = new Chart
+        {
+            Toolbar = new Toolbar { Show = false },
+            Background = "transparent",
+            Stacked = true,
+            Animations = new Animations { Enabled = false },
+        },
         Theme = new Theme { Mode = Mode.Dark },
         Xaxis = new XAxis { Type = XAxisType.Datetime },
-        Stroke = new Stroke { Curve = [Curve.Smooth] },
+        PlotOptions = new PlotOptions
+        {
+            Bar = new PlotOptionsBar { ColumnWidth = "80%" },
+        },
+        DataLabels = new DataLabels { Enabled = false },
+        Grid = new Grid
+        {
+            BorderColor = "rgba(255,255,255,0.05)",
+        },
+        Legend = new Legend { Position = LegendPosition.Top, FontSize = "11px" },
     };
 
-    private bool editing;
-    private bool confirmDelete;
-    private string editName = "";
-    private string editInterval = "";
+    private bool editing, confirmDelete;
+    private string editName = "", editInterval = "", editDefinition = "";
     private bool editEnabled;
-    private string editDefinition = "";
     private string? saveError;
 
     protected override async Task OnInitializedAsync()
@@ -241,7 +281,6 @@
         {
             await using var ctx = await DbFactory.CreateDbContextAsync();
             ctx.CurrentWorkspaceId = WorkspaceId;
-
             var from = DateTimeOffset.UtcNow.AddHours(-24);
             const int bucketMinutes = 5;
 
@@ -250,62 +289,47 @@
                     date_trunc('minute', "CompletedAt" AT TIME ZONE 'UTC') -
                         (EXTRACT(MINUTE FROM "CompletedAt" AT TIME ZONE 'UTC')::int % {{bucketMinutes}}) * interval '1 minute'
                         AS "Bucket",
-                    MODE() WITHIN GROUP (ORDER BY "Outcome") AS "Outcome",
-                    AVG("DurationMs") AS "AvgDurationMs",
-                    COUNT(*) AS "Count"
+                    COUNT(*) FILTER (WHERE "Outcome" = 'Ok')      AS "Ok",
+                    COUNT(*) FILTER (WHERE "Outcome" = 'Warn')    AS "Warn",
+                    COUNT(*) FILTER (WHERE "Outcome" = 'Crit')    AS "Crit",
+                    COUNT(*) FILTER (WHERE "Outcome" = 'Error')   AS "Error",
+                    COUNT(*) FILTER (WHERE "Outcome" = 'Unknown') AS "Unknown",
+                    COUNT(*)                                        AS "Total",
+                    AVG("DurationMs")                              AS "AvgDurationMs"
                 FROM "ProbeResults"
-                WHERE "ProbeId" = {0}
-                  AND "WorkspaceId" = {1}
-                  AND "CompletedAt" >= {2}
-                GROUP BY "Bucket"
-                ORDER BY "Bucket"
+                WHERE "ProbeId" = {0} AND "WorkspaceId" = {1} AND "CompletedAt" >= {2}
+                GROUP BY "Bucket" ORDER BY "Bucket"
                 """;
 
-            var rows = await ctx.Database
-                .SqlQueryRaw<TsRow>(sql, ProbeId, WorkspaceId, from)
-                .ToListAsync();
-
-            timeseriesPoints = rows.Select(r => new TimeseriesPoint(r.Bucket, r.Outcome, r.AvgDurationMs, r.Count)).ToList();
+            var rows = await ctx.Database.SqlQueryRaw<TsRow>(sql, ProbeId, WorkspaceId, from).ToListAsync();
+            timeseriesPoints = rows.Select(r => new TsPoint(r.Bucket, r.Ok, r.Warn, r.Crit, r.Error, r.Unknown, r.Total, r.AvgDurationMs)).ToList();
         }
-        catch
-        {
-            timeseriesPoints = [];
-        }
+        catch { timeseriesPoints = []; }
     }
 
     private sealed class TsRow
     {
         public DateTimeOffset Bucket { get; set; }
-        public string Outcome { get; set; } = "";
+        public long Ok { get; set; }
+        public long Warn { get; set; }
+        public long Crit { get; set; }
+        public long Error { get; set; }
+        public long Unknown { get; set; }
+        public long Total { get; set; }
         public double AvgDurationMs { get; set; }
-        public long Count { get; set; }
     }
 
-    private static int OutcomeRank(string outcome) => outcome switch
-    {
-        "Ok" => 1,
-        "Warn" => 2,
-        "Error" => 3,
-        "Crit" => 4,
-        _ => 0,
-    };
-
-    private sealed record TimeseriesPoint(DateTimeOffset Bucket, string Outcome, double AvgDurationMs, long Count);
+    private sealed record TsPoint(DateTimeOffset Bucket, long Ok, long Warn, long Crit,
+        long Error, long Unknown, long Total, double AvgDurationMs);
 
     private async Task LoadAsync()
     {
         await using var ctx = await DbFactory.CreateDbContextAsync();
         ctx.CurrentWorkspaceId = WorkspaceId;
-
         probe = await ctx.Probes.FirstOrDefaultAsync(p => p.Id == ProbeId);
         if (probe is null) return;
-
-        results = await ctx.ProbeResults
-            .Where(r => r.ProbeId == ProbeId)
-            .OrderByDescending(r => r.CompletedAt)
-            .Take(100)
-            .ToListAsync();
-
+        results = await ctx.ProbeResults.Where(r => r.ProbeId == ProbeId)
+            .OrderByDescending(r => r.CompletedAt).Take(100).ToListAsync();
         latestOutcome = results.Count > 0 ? results[0].Outcome : null;
     }
 
@@ -319,36 +343,25 @@
         editing = true;
     }
 
-    private void CancelEdit()
-    {
-        editing = false;
-        saveError = null;
-    }
+    private void CancelEdit() { editing = false; saveError = null; }
 
     private async Task SaveAsync()
     {
         if (!TimeSpan.TryParse(editInterval, out var interval) || interval <= TimeSpan.Zero)
         {
-            saveError = "Interval must be a valid time span (e.g. 00:05:00).";
-            return;
+            saveError = "Interval must be a valid time span (e.g. 00:05:00)."; return;
         }
-        if (string.IsNullOrWhiteSpace(editName))
-        {
-            saveError = "Name is required.";
-            return;
-        }
+        if (string.IsNullOrWhiteSpace(editName)) { saveError = "Name is required."; return; }
 
         await using var ctx = await DbFactory.CreateDbContextAsync();
         ctx.CurrentWorkspaceId = WorkspaceId;
         var p = await ctx.Probes.FirstOrDefaultAsync(x => x.Id == ProbeId);
         if (p is null) return;
-
         p.Name = editName.Trim();
         p.Definition = editDefinition;
         p.Interval = interval;
         p.Enabled = editEnabled;
         await ctx.SaveChangesAsync();
-
         editing = false;
         saveError = null;
         await LoadAsync();
@@ -359,11 +372,7 @@
         await using var ctx = await DbFactory.CreateDbContextAsync();
         ctx.CurrentWorkspaceId = WorkspaceId;
         var p = await ctx.Probes.FirstOrDefaultAsync(x => x.Id == ProbeId);
-        if (p is not null)
-        {
-            ctx.Probes.Remove(p);
-            await ctx.SaveChangesAsync();
-        }
+        if (p is not null) { ctx.Probes.Remove(p); await ctx.SaveChangesAsync(); }
         Nav.NavigateTo($"/workspaces/{WorkspaceId}/probes");
     }
 
