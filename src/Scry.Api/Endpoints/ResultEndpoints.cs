@@ -17,6 +17,7 @@ internal static class ResultEndpoints
         group.MapGet("/latest", async (Guid workspaceId, ScryDbContext ctx) =>
         {
             ctx.CurrentWorkspaceId = workspaceId;
+            // EF Core 10 translates GroupBy/First to a single ROW_NUMBER() OVER(PARTITION BY) window query.
             var results = await ctx.ProbeResults
                 .GroupBy(r => r.ProbeId)
                 .Select(g => g.OrderByDescending(r => r.CompletedAt).First())
@@ -25,7 +26,7 @@ internal static class ResultEndpoints
         });
 
         // Last N results for a specific probe.
-        group.MapGet("/{probeId:guid}", async (Guid workspaceId, Guid probeId, int limit, ScryDbContext ctx) =>
+        group.MapGet("/{probeId:guid}", async (Guid workspaceId, Guid probeId, ScryDbContext ctx, int limit = 0) =>
         {
             ctx.CurrentWorkspaceId = workspaceId;
             var take = Math.Clamp(limit == 0 ? 50 : limit, 1, 500);

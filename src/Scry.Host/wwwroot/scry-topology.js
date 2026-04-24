@@ -1,6 +1,7 @@
 window.ScryTopology = (function () {
     let cy = null;
     let dotNetRef = null;
+    let hubConnection = null;
 
     const healthColor = {
         'Ok':      '#34d399',
@@ -196,8 +197,37 @@ window.ScryTopology = (function () {
             cy.zoom({ level: cy.zoom() * 0.8, renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 } });
         },
 
+        connectHub(workspaceId, ref) {
+            dotNetRef = ref;
+            if (hubConnection) { return; }
+
+            const conn = new signalR.HubConnectionBuilder()
+                .withUrl('/hubs/probes')
+                .withAutomaticReconnect()
+                .build();
+
+            conn.onclose(() => ref.invokeMethodAsync('OnHubStatusChanged', 'disconnected').catch(() => {}));
+            conn.onreconnecting(() => ref.invokeMethodAsync('OnHubStatusChanged', 'reconnecting').catch(() => {}));
+            conn.onreconnected(() => {
+                conn.invoke('JoinWorkspace', workspaceId).catch(() => {});
+                ref.invokeMethodAsync('OnHubStatusChanged', 'connected').catch(() => {});
+            });
+
+            conn.on('ProbeResult', ({ probeId, workspaceId: wsId, outcome }) => {
+                ref.invokeMethodAsync('OnProbeResultPushed', probeId, wsId, outcome).catch(() => {});
+            });
+
+            conn.start()
+                .then(() => conn.invoke('JoinWorkspace', workspaceId))
+                .then(() => ref.invokeMethodAsync('OnHubStatusChanged', 'connected').catch(() => {}))
+                .catch(() => ref.invokeMethodAsync('OnHubStatusChanged', 'error').catch(() => {}));
+
+            hubConnection = conn;
+        },
+
         destroy() {
             if (cy) { cy.destroy(); cy = null; }
+            if (hubConnection) { hubConnection.stop().catch(() => {}); hubConnection = null; }
             dotNetRef = null;
         },
     };

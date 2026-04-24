@@ -17,6 +17,7 @@ public sealed class AssetHealthService(IDbContextFactory<ScryDbContext> dbFactor
 
         var probeIds = probes.Select(p => p.Id).ToList();
 
+        // EF Core 10 translates GroupBy/First to a single ROW_NUMBER() OVER(PARTITION BY) window query.
         var latestResults = await ctx.ProbeResults
             .Where(r => probeIds.Contains(r.ProbeId))
             .GroupBy(r => r.ProbeId)

@@ -70,10 +70,11 @@ internal static class TopologyEndpoints
             {
                 return Results.NotFound();
             }
-            // Delete inbound relationships explicitly — TargetAssetId FK is Restrict, not Cascade.
-            await ctx.AssetRelationships
-                .Where(r => r.WorkspaceId == workspaceId && r.TargetAssetId == id)
-                .ExecuteDeleteAsync();
+            // TargetAssetId FK is Restrict (not Cascade) — delete both directions before removing the asset.
+            var rels = await ctx.AssetRelationships
+                .Where(r => r.SourceAssetId == id || r.TargetAssetId == id)
+                .ToListAsync();
+            ctx.AssetRelationships.RemoveRange(rels);
             ctx.Assets.Remove(asset);
             await ctx.SaveChangesAsync();
             return Results.NoContent();

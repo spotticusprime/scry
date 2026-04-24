@@ -267,7 +267,7 @@ app.MapPost("/api/demo/seed", async (IDbContextFactory<ScryDbContext> factory, I
 }).RequireAuthorization();
 
 // ─── SignalR hub ──────────────────────────────────────────────────────────────
-app.MapHub<ProbeHub>("/hubs/probes");
+app.MapHub<ProbeHub>("/hubs/probes").RequireAuthorization();
 
 // ─── REST API ─────────────────────────────────────────────────────────────────
 app.MapScryApi();

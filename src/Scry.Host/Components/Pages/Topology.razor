@@ -4,8 +4,6 @@
 @inject IDbContextFactory<ScryDbContext> DbFactory
 @inject IAssetHealthService AssetHealthSvc
 @inject IJSRuntime JS
-@inject NavigationManager Nav
-@using Microsoft.AspNetCore.SignalR.Client
 
 <PageTitle>Topology — Scry</PageTitle>
 
@@ -255,7 +253,6 @@
 
     private DotNetObjectReference<Topology>? dotNetRef;
     private bool cytoscapeInitialized;
-    private HubConnection? _hub;
     private Dictionary<Guid, Guid> _probeToAsset = [];
     private Dictionary<Guid, ProbeOutcome?> _assetHealth = [];
     private string _hubStatus = "connecting";
@@ -263,79 +260,47 @@
     protected override async Task OnInitializedAsync()
     {
         await RefreshAsync();
-        await ConnectHubAsync();
-    }
-
-    private async Task ConnectHubAsync()
-    {
-        // Guard: don't create a second connection if one is already live
-        if (_hub is not null && _hub.State != HubConnectionState.Disconnected)
-            return;
-
-        var hubUrl = Nav.ToAbsoluteUri("/hubs/probes").ToString();
-        _hub = new HubConnectionBuilder()
-            .WithUrl(hubUrl)
-            .WithAutomaticReconnect()
-            .Build();
-
-        _hub.Closed += async _ =>
-        {
-            _hubStatus = "disconnected";
-            await InvokeAsync(StateHasChanged);
-        };
-
-        _hub.Reconnecting += async _ =>
-        {
-            _hubStatus = "reconnecting";
-            await InvokeAsync(StateHasChanged);
-        };
-
-        _hub.Reconnected += async _ =>
-        {
-            _hubStatus = "connected";
-            // Re-join the workspace group after reconnect — the server-side group membership is lost
-            try { await _hub!.InvokeAsync("JoinWorkspace", WorkspaceId.ToString()); } catch { }
-            await InvokeAsync(StateHasChanged);
-        };
-
-        _hub.On<ProbeResultEvent>("ProbeResult", async evt =>
-        {
-            if (evt.WorkspaceId != WorkspaceId) return;
-            if (!_probeToAsset.TryGetValue(evt.ProbeId, out var assetId)) return;
-            if (!Enum.TryParse<ProbeOutcome>(evt.Outcome, out var incoming)) return;
-            if (_assetHealth.TryGetValue(assetId, out var cur) && cur.HasValue && !AssetHealthSvc.IsWorse(incoming, cur.Value))
-                return;
-            _assetHealth[assetId] = incoming;
-            if (cytoscapeInitialized)
-                await JS.InvokeVoidAsync("ScryTopology.updateNodeHealth", assetId.ToString(), incoming.ToString());
-        });
-
-        try
-        {
-            await _hub.StartAsync();
-            _hubStatus = "connected";
-            await _hub.InvokeAsync("JoinWorkspace", WorkspaceId.ToString());
-        }
-        catch (Exception ex)
-        {
-            _hubStatus = "error";
-            Console.Error.WriteLine($"[Topology] SignalR connect failed: {ex.Message}");
-        }
-        await InvokeAsync(StateHasChanged);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (firstRender)
+        {
+            dotNetRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("ScryTopology.connectHub", WorkspaceId.ToString(), dotNetRef);
+        }
+
         if (graphData is not null && graphData.Nodes.Count > 0 && !cytoscapeInitialized)
         {
             cytoscapeInitialized = true;
-            dotNetRef = DotNetObjectReference.Create(this);
             await JS.InvokeVoidAsync("ScryTopology.init", dotNetRef, "topology-container", graphData);
         }
         else if (graphData is not null && cytoscapeInitialized)
         {
             await JS.InvokeVoidAsync("ScryTopology.update", graphData);
         }
+    }
+
+    [JSInvokable]
+    public Task OnHubStatusChanged(string status)
+    {
+        _hubStatus = status;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public async Task OnProbeResultPushed(string probeIdStr, string workspaceIdStr, string outcomeStr)
+    {
+        if (!Guid.TryParse(workspaceIdStr, out var wsId) || wsId != WorkspaceId) { return; }
+        if (!Guid.TryParse(probeIdStr, out var probeId)) { return; }
+        if (!Enum.TryParse<ProbeOutcome>(outcomeStr, out var incoming)) { return; }
+        if (!_probeToAsset.TryGetValue(probeId, out var assetId)) { return; }
+        _assetHealth[assetId] = incoming;
+        if (cytoscapeInitialized)
+        {
+            await JS.InvokeVoidAsync("ScryTopology.updateNodeHealth", assetId.ToString(), incoming.ToString());
+        }
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task RefreshAsync()
@@ -444,7 +409,9 @@
             ExternalId = string.IsNullOrWhiteSpace(newExternalId) ? null : newExternalId.Trim(),
         };
         if (!string.IsNullOrWhiteSpace(newDescription))
+        {
             asset.Attributes["description"] = newDescription.Trim();
+        }
 
         ctx.Assets.Add(asset);
         await ctx.SaveChangesAsync();
@@ -460,7 +427,9 @@
             relError = "Select both source and target."; return;
         }
         if (!Enum.TryParse<RelationshipKind>(relKind, out var kind))
+        {
             kind = RelationshipKind.DependsOn;
+        }
 
         await using var ctx = await DbFactory.CreateDbContextAsync();
         ctx.AssetRelationships.Add(new AssetRelationship
@@ -483,9 +452,11 @@
         var asset = await ctx.Assets.FirstOrDefaultAsync(a => a.Id == id);
         if (asset is not null)
         {
-            await ctx.AssetRelationships
-                .Where(r => r.WorkspaceId == WorkspaceId && r.TargetAssetId == id)
-                .ExecuteDeleteAsync();
+            // TargetAssetId FK is Restrict — delete both directions before removing the asset.
+            var rels = await ctx.AssetRelationships
+                .Where(r => r.SourceAssetId == id || r.TargetAssetId == id)
+                .ToListAsync();
+            ctx.AssetRelationships.RemoveRange(rels);
             ctx.Assets.Remove(asset);
             await ctx.SaveChangesAsync();
         }
@@ -498,7 +469,9 @@
     private async Task FitViewAsync()
     {
         if (cytoscapeInitialized)
+        {
             await JS.InvokeVoidAsync("ScryTopology.fitView");
+        }
     }
 
     private ProbeOutcome? AssetHealth(Guid assetId) =>
@@ -515,15 +488,11 @@
 
     public async ValueTask DisposeAsync()
     {
-        if (_hub is not null)
-        {
-            try { await _hub.DisposeAsync(); } catch { }
-        }
-        if (cytoscapeInitialized)
+        if (dotNetRef is not null)
         {
             try { await JS.InvokeVoidAsync("ScryTopology.destroy"); } catch { }
+            dotNetRef.Dispose();
         }
-        dotNetRef?.Dispose();
     }
 
     private sealed record AssetInfo(Guid Id, string Name, string Kind, string? ExternalId, Dictionary<string, string> Attributes);
@@ -531,5 +500,4 @@
     private sealed record GraphNode(string id, string name, string kind, string? health);
     private sealed record GraphEdge(string id, string source, string target, string kind);
     private sealed record TopologyData(List<GraphNode> Nodes, List<GraphEdge> Edges);
-    private sealed record ProbeResultEvent(Guid ProbeId, Guid WorkspaceId, string Outcome, string? Message, DateTimeOffset CompletedAt, double DurationMs);
 }
