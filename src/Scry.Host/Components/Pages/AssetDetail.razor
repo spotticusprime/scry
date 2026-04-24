@@ -1,0 +1,305 @@
+@page "/workspaces/{WorkspaceId:guid}/assets/{AssetId:guid}"
+@attribute [Authorize]
+@inject IDbContextFactory<ScryDbContext> DbFactory
+@inject NavigationManager Nav
+
+<PageTitle>@(asset?.Name ?? "Asset") — Scry</PageTitle>
+
+@if (asset is null)
+{
+    <p class="text-muted">Asset not found.</p>
+    return;
+}
+
+<div class="d-flex align-items-center mb-1">
+    <a href="/workspaces/@WorkspaceId/topology" class="text-muted text-decoration-none small me-2">
+        <i class="bi bi-arrow-left"></i> Topology
+    </a>
+</div>
+
+<div class="d-flex align-items-center justify-content-between mb-4">
+    <div>
+        <h1 class="page-title">@asset.Name</h1>
+        <p class="page-subtitle mb-0">@asset.Kind</p>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="scry-card p-3">
+            <div class="sidebar-label">Kind</div>
+            <p class="mb-0 small">@asset.Kind</p>
+        </div>
+    </div>
+    @if (!string.IsNullOrEmpty(asset.ExternalId))
+    {
+        <div class="col-md-4">
+            <div class="scry-card p-3">
+                <div class="sidebar-label">External ID</div>
+                <p class="mb-0 small font-mono">@asset.ExternalId</p>
+            </div>
+        </div>
+    }
+    @if (!string.IsNullOrEmpty(asset.Provider))
+    {
+        <div class="col-md-4">
+            <div class="scry-card p-3">
+                <div class="sidebar-label">Provider</div>
+                <p class="mb-0 small">@asset.Provider</p>
+            </div>
+        </div>
+    }
+</div>
+
+@if (asset.Attributes.TryGetValue("description", out var desc) && !string.IsNullOrWhiteSpace(desc))
+{
+    <div class="scry-card mb-3 p-3">
+        <div class="sidebar-label">Description</div>
+        <p class="mb-0 small">@desc</p>
+    </div>
+}
+
+@if (timeseriesPoints.Count > 0)
+{
+    <div class="scry-card mb-3">
+        <div class="scry-card-header"><i class="bi bi-graph-up me-2"></i>24h probe trend</div>
+        <div class="p-3">
+            <ApexChart TItem="TsPoint" Height="200" Options="chartOptions">
+                <ApexPointSeries TItem="TsPoint"
+                    Items="timeseriesPoints"
+                    Name="Duration (ms)"
+                    SeriesType="SeriesType.Line"
+                    XValue="p => p.Bucket.ToUnixTimeMilliseconds()"
+                    YValue="p => (decimal)p.AvgDurationMs"
+                    Color="#0d6efd" />
+                <ApexPointSeries TItem="TsPoint"
+                    Items="timeseriesPoints"
+                    Name="Outcome"
+                    SeriesType="SeriesType.Area"
+                    XValue="p => p.Bucket.ToUnixTimeMilliseconds()"
+                    YValue="p => (decimal)OutcomeRank(p.Outcome)"
+                    Color="#198754" />
+            </ApexChart>
+        </div>
+    </div>
+}
+
+<div class="scry-card mb-3">
+    <div class="scry-card-header"><i class="bi bi-broadcast me-2"></i>Attached probes (@probes.Count)</div>
+    @if (probes.Count == 0)
+    {
+        <div class="p-4 text-center text-muted">No probes attached to this asset.</div>
+    }
+    else
+    {
+        <table class="table scry-table mb-0">
+            <thead>
+                <tr>
+                    <th style="width:14px"></th>
+                    <th>Name</th>
+                    <th>Kind</th>
+                    <th>Status</th>
+                    <th>Last run</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var p in probes)
+                {
+                    <tr>
+                        <td><span class="dot @DotClass(p.Outcome)"></span></td>
+                        <td>
+                            <a href="/workspaces/@WorkspaceId/probes/@p.Id" class="text-white text-decoration-none">@p.Name</a>
+                        </td>
+                        <td><span class="text-muted font-mono">@p.Kind</span></td>
+                        <td>
+                            @if (p.Outcome.HasValue)
+                            {
+                                <span class="badge @BadgeClass(p.Outcome.Value)">@p.Outcome</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted small">No results</span>
+                            }
+                        </td>
+                        <td class="text-muted">@(p.CompletedAt.HasValue ? p.CompletedAt.Value.ToString("yyyy-MM-dd HH:mm") + " UTC" : "—")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>
+
+@if (inboundRels.Count > 0 || outboundRels.Count > 0)
+{
+    <div class="scry-card mb-3">
+        <div class="scry-card-header"><i class="bi bi-diagram-3 me-2"></i>Relationships</div>
+        <div class="p-3">
+            @if (outboundRels.Count > 0)
+            {
+                <div class="sidebar-label mb-2">Outbound</div>
+                @foreach (var r in outboundRels)
+                {
+                    <div class="d-flex align-items-center gap-2 mb-1 small">
+                        <span class="text-muted font-mono">@r.Kind</span>
+                        <i class="bi bi-arrow-right text-muted"></i>
+                        <a href="/workspaces/@WorkspaceId/assets/@r.OtherId" class="text-white text-decoration-none">@r.OtherName</a>
+                    </div>
+                }
+            }
+            @if (inboundRels.Count > 0)
+            {
+                <div class="sidebar-label mt-3 mb-2">Inbound</div>
+                @foreach (var r in inboundRels)
+                {
+                    <div class="d-flex align-items-center gap-2 mb-1 small">
+                        <a href="/workspaces/@WorkspaceId/assets/@r.OtherId" class="text-white text-decoration-none">@r.OtherName</a>
+                        <i class="bi bi-arrow-right text-muted"></i>
+                        <span class="text-muted font-mono">@r.Kind</span>
+                    </div>
+                }
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid WorkspaceId { get; set; }
+    [Parameter] public Guid AssetId { get; set; }
+
+    private Asset? asset;
+    private List<ProbeRow> probes = [];
+    private List<RelRow> inboundRels = [];
+    private List<RelRow> outboundRels = [];
+    private List<TsPoint> timeseriesPoints = [];
+
+    private readonly ApexChartOptions<TsPoint> chartOptions = new()
+    {
+        Chart = new Chart { Toolbar = new Toolbar { Show = false }, Background = "transparent" },
+        Theme = new Theme { Mode = Mode.Dark },
+        Xaxis = new XAxis { Type = XAxisType.Datetime },
+        Stroke = new Stroke { Curve = [Curve.Smooth] },
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var ctx = await DbFactory.CreateDbContextAsync();
+        ctx.CurrentWorkspaceId = WorkspaceId;
+
+        asset = await ctx.Assets.FirstOrDefaultAsync(a => a.Id == AssetId);
+        if (asset is null) { return; }
+
+        var allProbes = await ctx.Probes.Where(p => p.AssetId == AssetId).ToListAsync();
+        var probeIds = allProbes.Select(p => p.Id).ToList();
+
+        var latestResults = await ctx.ProbeResults
+            .Where(r => probeIds.Contains(r.ProbeId))
+            .GroupBy(r => r.ProbeId)
+            .Select(g => g.OrderByDescending(r => r.CompletedAt).First())
+            .ToListAsync();
+
+        var resultMap = latestResults.ToDictionary(r => r.ProbeId);
+
+        probes = allProbes.Select(p =>
+        {
+            var r = resultMap.GetValueOrDefault(p.Id);
+            return new ProbeRow(p.Id, p.Name, p.Kind,
+                r is not null ? (ProbeOutcome?)r.Outcome : null,
+                r?.CompletedAt);
+        }).ToList();
+
+        // Load relationships.
+        var allAssets = await ctx.Assets.ToDictionaryAsync(a => a.Id, a => a.Name);
+        var outbound = await ctx.AssetRelationships.Where(r => r.SourceAssetId == AssetId).ToListAsync();
+        var inbound = await ctx.AssetRelationships.Where(r => r.TargetAssetId == AssetId).ToListAsync();
+
+        outboundRels = outbound.Select(r => new RelRow(
+            r.TargetAssetId,
+            allAssets.GetValueOrDefault(r.TargetAssetId, r.TargetAssetId.ToString()),
+            r.Kind.ToString())).ToList();
+
+        inboundRels = inbound.Select(r => new RelRow(
+            r.SourceAssetId,
+            allAssets.GetValueOrDefault(r.SourceAssetId, r.SourceAssetId.ToString()),
+            r.Kind.ToString())).ToList();
+
+        // Load timeseries for first probe (best effort).
+        if (probeIds.Count > 0)
+        {
+            await LoadTimeseriesAsync(ctx, probeIds[0]);
+        }
+    }
+
+    private async Task LoadTimeseriesAsync(ScryDbContext ctx, Guid probeId)
+    {
+        try
+        {
+            var from = DateTimeOffset.UtcNow.AddHours(-24);
+            const int bucketMinutes = 5;
+
+            var sql = $$"""
+                SELECT
+                    date_trunc('minute', "CompletedAt" AT TIME ZONE 'UTC') -
+                        (EXTRACT(MINUTE FROM "CompletedAt" AT TIME ZONE 'UTC')::int % {{bucketMinutes}}) * interval '1 minute'
+                        AS "Bucket",
+                    MODE() WITHIN GROUP (ORDER BY "Outcome") AS "Outcome",
+                    AVG("DurationMs") AS "AvgDurationMs",
+                    COUNT(*) AS "Count"
+                FROM "ProbeResults"
+                WHERE "ProbeId" = {0}
+                  AND "WorkspaceId" = {1}
+                  AND "CompletedAt" >= {2}
+                GROUP BY "Bucket"
+                ORDER BY "Bucket"
+                """;
+
+            var rows = await ctx.Database
+                .SqlQueryRaw<TsRow>(sql, probeId, WorkspaceId, from)
+                .ToListAsync();
+
+            timeseriesPoints = rows.Select(r => new TsPoint(r.Bucket, r.Outcome, r.AvgDurationMs, r.Count)).ToList();
+        }
+        catch
+        {
+            timeseriesPoints = [];
+        }
+    }
+
+    private sealed class TsRow
+    {
+        public DateTimeOffset Bucket { get; set; }
+        public string Outcome { get; set; } = "";
+        public double AvgDurationMs { get; set; }
+        public long Count { get; set; }
+    }
+
+    private static int OutcomeRank(string outcome) => outcome switch
+    {
+        "Ok" => 1,
+        "Warn" => 2,
+        "Error" => 3,
+        "Crit" => 4,
+        _ => 0,
+    };
+
+    private static string DotClass(ProbeOutcome? o) => o switch
+    {
+        ProbeOutcome.Ok => "dot-ok",
+        ProbeOutcome.Warn => "dot-warn",
+        ProbeOutcome.Crit => "dot-crit",
+        ProbeOutcome.Error => "dot-error",
+        _ => "dot-unknown",
+    };
+
+    private static string BadgeClass(ProbeOutcome o) => o switch
+    {
+        ProbeOutcome.Ok => "badge-ok",
+        ProbeOutcome.Warn => "badge-warn",
+        ProbeOutcome.Crit => "badge-crit",
+        ProbeOutcome.Error => "badge-error",
+        _ => "badge-unknown",
+    };
+
+    private sealed record ProbeRow(Guid Id, string Name, string Kind, ProbeOutcome? Outcome, DateTimeOffset? CompletedAt);
+    private sealed record RelRow(Guid OtherId, string OtherName, string Kind);
+    private sealed record TsPoint(DateTimeOffset Bucket, string Outcome, double AvgDurationMs, long Count);
+}

@@ -2,10 +2,12 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
+using ApexCharts;
 using Scry.Api;
 using Scry.Core;
 using Scry.Data;
 using Scry.Host.Components;
+using Scry.Host.Hubs;
 using Scry.Probes;
 using Scry.Runner;
 
@@ -42,6 +44,10 @@ builder.Services.AddScryRunner(opt =>
     }
 });
 
+// ─── SignalR ─────────────────────────────────────────────────────────────────
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<IProbeResultPublisher, SignalRProbeResultPublisher>();
+
 // ─── REST API ────────────────────────────────────────────────────────────────
 builder.Services.AddScryApi();
 
@@ -63,10 +69,12 @@ builder.Services.AddCascadingAuthenticationState();
 // ─── Blazor ──────────────────────────────────────────────────────────────────
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+builder.Services.AddApexCharts();
 
 // ─── HTTP ────────────────────────────────────────────────────────────────────
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddAntiforgery();
+
 
 var app = builder.Build();
 
@@ -254,6 +262,9 @@ app.MapPost("/api/demo/seed", async (IDbContextFactory<ScryDbContext> factory, I
         workWorkspaceId = work.Id,
     });
 }).RequireAuthorization();
+
+// ─── SignalR hub ──────────────────────────────────────────────────────────────
+app.MapHub<ProbeHub>("/hubs/probes");
 
 // ─── REST API ─────────────────────────────────────────────────────────────────
 app.MapScryApi();
