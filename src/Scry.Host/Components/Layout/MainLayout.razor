@@ -51,6 +51,11 @@
             <a href="/auth/logout" class="scry-nav-item">
                 <i class="bi bi-box-arrow-right"></i><span>Sign out</span>
             </a>
+            <!-- Phase 1: single-node only — sticky sessions required for multi-node -->
+            <div class="scry-node-badge" title="Blazor Interactive Server requires sticky sessions. Scale-out needs a Redis SignalR backplane.">
+                <i class="bi bi-node-plus"></i>
+                <span>Single-node mode</span>
+            </div>
         </div>
     </nav>
 

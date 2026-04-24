@@ -2,6 +2,7 @@
 @attribute [Authorize]
 @implements IAsyncDisposable
 @inject IDbContextFactory<ScryDbContext> DbFactory
+@inject IAssetHealthService AssetHealthSvc
 @inject IJSRuntime JS
 @inject NavigationManager Nav
 @using Microsoft.AspNetCore.SignalR.Client
@@ -39,13 +40,17 @@
         }
     </div>
 
-    <!-- Top-left hint (only when nodes exist) -->
-    @if (graphData?.Nodes.Count > 0)
-    {
-        <div class="topology-hint">
-            <i class="bi bi-cursor me-1"></i>Click a node to inspect
-        </div>
-    }
+    <!-- Top-left hint + live indicator -->
+    <div class="topology-hint">
+        @if (graphData?.Nodes.Count > 0)
+        {
+            <span><i class="bi bi-cursor me-1"></i>Click a node to inspect</span>
+        }
+        <span class="topology-hub-badge topology-hub-badge-@_hubStatus" title="SignalR: @_hubStatus">
+            <i class="bi @(_hubStatus == "connected" ? "bi-lightning-charge-fill" : _hubStatus == "reconnecting" ? "bi-arrow-repeat" : "bi-lightning-charge")"></i>
+            @_hubStatus
+        </span>
+    </div>
 
     <!-- Bottom-left FAB toolbar -->
     <div class="topology-toolbar">
@@ -58,6 +63,9 @@
             <button class="topology-fab" @onclick="ToggleAddRelationship">
                 <i class="bi @(addingRelationship ? "bi-x-lg" : "bi-diagram-3")"></i>
                 @(addingRelationship ? "Cancel" : "Add link")
+            </button>
+            <button class="topology-fab" @onclick="FitViewAsync">
+                <i class="bi bi-fullscreen"></i>Fit view
             </button>
         }
         <button class="topology-fab" @onclick="RefreshAsync">
@@ -250,6 +258,7 @@
     private HubConnection? _hub;
     private Dictionary<Guid, Guid> _probeToAsset = [];
     private Dictionary<Guid, ProbeOutcome?> _assetHealth = [];
+    private string _hubStatus = "connecting";
 
     protected override async Task OnInitializedAsync()
     {
@@ -259,17 +268,43 @@
 
     private async Task ConnectHubAsync()
     {
+        // Guard: don't create a second connection if one is already live
+        if (_hub is not null && _hub.State != HubConnectionState.Disconnected)
+            return;
+
         var hubUrl = Nav.ToAbsoluteUri("/hubs/probes").ToString();
         _hub = new HubConnectionBuilder()
             .WithUrl(hubUrl)
             .WithAutomaticReconnect()
             .Build();
 
+        _hub.Closed += async _ =>
+        {
+            _hubStatus = "disconnected";
+            await InvokeAsync(StateHasChanged);
+        };
+
+        _hub.Reconnecting += async _ =>
+        {
+            _hubStatus = "reconnecting";
+            await InvokeAsync(StateHasChanged);
+        };
+
+        _hub.Reconnected += async _ =>
+        {
+            _hubStatus = "connected";
+            // Re-join the workspace group after reconnect — the server-side group membership is lost
+            try { await _hub!.InvokeAsync("JoinWorkspace", WorkspaceId.ToString()); } catch { }
+            await InvokeAsync(StateHasChanged);
+        };
+
         _hub.On<ProbeResultEvent>("ProbeResult", async evt =>
         {
-            if (evt.WorkspaceId != WorkspaceId) { return; }
-            if (!_probeToAsset.TryGetValue(evt.ProbeId, out var assetId)) { return; }
-            if (!Enum.TryParse<ProbeOutcome>(evt.Outcome, out var incoming)) { return; }
+            if (evt.WorkspaceId != WorkspaceId) return;
+            if (!_probeToAsset.TryGetValue(evt.ProbeId, out var assetId)) return;
+            if (!Enum.TryParse<ProbeOutcome>(evt.Outcome, out var incoming)) return;
+            if (_assetHealth.TryGetValue(assetId, out var cur) && cur.HasValue && !AssetHealthSvc.IsWorse(incoming, cur.Value))
+                return;
             _assetHealth[assetId] = incoming;
             if (cytoscapeInitialized)
                 await JS.InvokeVoidAsync("ScryTopology.updateNodeHealth", assetId.ToString(), incoming.ToString());
@@ -278,9 +313,15 @@
         try
         {
             await _hub.StartAsync();
+            _hubStatus = "connected";
             await _hub.InvokeAsync("JoinWorkspace", WorkspaceId.ToString());
         }
-        catch { }
+        catch (Exception ex)
+        {
+            _hubStatus = "error";
+            Console.Error.WriteLine($"[Topology] SignalR connect failed: {ex.Message}");
+        }
+        await InvokeAsync(StateHasChanged);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -305,28 +346,9 @@
         var assets = await ctx.Assets.OrderBy(a => a.Name).ToListAsync();
         allAssets = assets.Select(a => new AssetInfo(a.Id, a.Name, a.Kind.ToString(), a.ExternalId, a.Attributes)).ToList();
 
-        var probes = await ctx.Probes.Where(p => p.AssetId != null).ToListAsync();
-        var probeIds = probes.Select(p => p.Id).ToList();
-
-        var latestResults = await ctx.ProbeResults
-            .Where(r => probeIds.Contains(r.ProbeId))
-            .GroupBy(r => r.ProbeId)
-            .Select(g => g.OrderByDescending(r => r.CompletedAt).First())
-            .ToListAsync();
-
-        var resultByProbe = latestResults.ToDictionary(r => r.ProbeId, r => r.Outcome);
-
-        _probeToAsset = probes.Where(p => p.AssetId.HasValue).ToDictionary(p => p.Id, p => p.AssetId!.Value);
-
-        _assetHealth = new Dictionary<Guid, ProbeOutcome?>();
-        foreach (var probe in probes)
-        {
-            if (probe.AssetId is null) { continue; }
-            var assetId = probe.AssetId.Value;
-            if (!resultByProbe.TryGetValue(probe.Id, out var outcome)) { continue; }
-            if (!_assetHealth.TryGetValue(assetId, out var current) || current is null || WorstOutcome(outcome, current.Value))
-                _assetHealth[assetId] = outcome;
-        }
+        var snapshot = await AssetHealthSvc.GetSnapshotAsync(WorkspaceId);
+        _probeToAsset = snapshot.ProbeToAsset;
+        _assetHealth = snapshot.AssetHealth;
 
         var relationships = await ctx.AssetRelationships.ToListAsync();
 
@@ -473,22 +495,14 @@
         await RefreshAsync();
     }
 
+    private async Task FitViewAsync()
+    {
+        if (cytoscapeInitialized)
+            await JS.InvokeVoidAsync("ScryTopology.fitView");
+    }
+
     private ProbeOutcome? AssetHealth(Guid assetId) =>
         _assetHealth.TryGetValue(assetId, out var h) ? h : null;
-
-    private static bool WorstOutcome(ProbeOutcome incoming, ProbeOutcome current)
-    {
-        static int Rank(ProbeOutcome o) => o switch
-        {
-            ProbeOutcome.Ok      => 0,
-            ProbeOutcome.Unknown => 1,
-            ProbeOutcome.Warn    => 2,
-            ProbeOutcome.Crit    => 3,
-            ProbeOutcome.Error   => 4,
-            _                    => 0,
-        };
-        return Rank(incoming) > Rank(current);
-    }
 
     private static string ProbeDotClass(ProbeOutcome? o) => o switch
     {

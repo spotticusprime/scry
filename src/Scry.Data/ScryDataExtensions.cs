@@ -13,4 +13,10 @@ public static class ScryDataExtensions
             new JobReaper(sp.GetRequiredService<IDbContextFactory<ScryJobDbContext>>()));
         return services;
     }
+
+    public static IServiceCollection AddScryData(this IServiceCollection services)
+    {
+        services.AddScoped<IAssetHealthService, AssetHealthService>();
+        return services;
+    }
 }

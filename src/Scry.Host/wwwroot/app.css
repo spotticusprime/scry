@@ -257,6 +257,24 @@ body {
     flex-shrink: 0;
 }
 
+/* Single-node mode label at sidebar bottom */
+.scry-node-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 6px 4px 0;
+    padding: 5px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--border-dim);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-3);
+    cursor: default;
+    user-select: none;
+}
+
 /* ── Main area ──────────────────────────────────── */
 .scry-main {
     flex: 1;
@@ -729,6 +747,9 @@ code {
     position: absolute;
     top: 14px;
     left: 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
     background: var(--surface-glass);
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
@@ -740,6 +761,25 @@ code {
     z-index: 20;
     pointer-events: none;
 }
+
+/* SignalR live indicator pill */
+.topology-hub-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 2px 7px;
+    border-radius: 10px;
+    border: 1px solid;
+}
+.topology-hub-badge-connected    { color: var(--ok);   border-color: rgba(52,211,153,0.25); }
+.topology-hub-badge-reconnecting { color: var(--warn); border-color: rgba(251,191,36,0.25); }
+.topology-hub-badge-connecting   { color: var(--text-3); border-color: var(--border-dim); }
+.topology-hub-badge-disconnected { color: var(--crit); border-color: rgba(248,113,113,0.25); }
+.topology-hub-badge-error        { color: var(--error); border-color: rgba(167,139,250,0.25); }
 
 .topology-toolbar {
     position: absolute;

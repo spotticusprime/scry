@@ -26,6 +26,7 @@ builder.Services.AddDbContextFactory<ScryDbContext>(opt => opt.UseNpgsql(pgConn)
 builder.Services.AddDbContextFactory<ScryJobDbContext>(opt => opt.UseMySQL(myConn));
 
 builder.Services.AddScryJobQueue();
+builder.Services.AddScryData();
 
 // ─── Probes & alerts ─────────────────────────────────────────────────────────
 builder.Services.AddScryProbes();
@@ -67,6 +68,8 @@ builder.Services.AddAuthorization();
 builder.Services.AddCascadingAuthenticationState();
 
 // ─── Blazor ──────────────────────────────────────────────────────────────────
+// PHASE 1: Single-node only. Blazor Interactive Server requires sticky sessions; scale-out
+// needs a Redis SignalR backplane and session affinity at the load balancer.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddApexCharts();
