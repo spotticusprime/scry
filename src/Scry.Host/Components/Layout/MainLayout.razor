@@ -1,6 +1,8 @@
 @inherits LayoutComponentBase
+@implements IDisposable
 @inject NavigationManager Nav
 @inject IDbContextFactory<ScryDbContext> DbFactory
+@inject IJSRuntime JS
 
 <div class="scry-shell">
     <nav class="scry-sidebar">
@@ -51,10 +53,13 @@
             <a href="/auth/logout" class="scry-nav-item">
                 <i class="bi bi-box-arrow-right"></i><span>Sign out</span>
             </a>
-            <!-- Phase 1: single-node only — sticky sessions required for multi-node -->
             <div class="scry-node-badge" title="Blazor Interactive Server requires sticky sessions. Scale-out needs a Redis SignalR backplane.">
                 <i class="bi bi-node-plus"></i>
                 <span>Single-node mode</span>
+            </div>
+            <div class="scry-node-badge" style="opacity:0.6;" title="@(RendererInfo.IsInteractive ? "Blazor circuit connected" : "Prerendered — circuit not yet active")">
+                <i class="bi @(RendererInfo.IsInteractive ? "bi-lightning-charge-fill" : "bi-lightning")"></i>
+                <span>@(RendererInfo.IsInteractive ? "Circuit active" : "SSR only")</span>
             </div>
         </div>
     </nav>
@@ -70,27 +75,55 @@
     private List<Workspace> workspaces = [];
     private Guid? CurrentWorkspaceId;
 
+    protected override void OnInitialized()
+    {
+        Nav.LocationChanged += HandleLocationChanged;
+    }
+
     protected override async Task OnInitializedAsync()
     {
         await using var ctx = await DbFactory.CreateDbContextAsync();
         workspaces = await ctx.Workspaces.OrderBy(w => w.Name).ToListAsync();
+        SyncWorkspaceFromUrl(Nav.Uri);
+    }
 
-        var uri = new Uri(Nav.Uri);
-        var segments = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+            await JS.InvokeVoidAsync("console.log", "[Scry] Blazor circuit active on MainLayout");
+    }
+
+    private void HandleLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        SyncWorkspaceFromUrl(e.Location);
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void SyncWorkspaceFromUrl(string url)
+    {
+        var segments = new Uri(url).AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
         if (segments.Length >= 2 && segments[0] == "workspaces" && Guid.TryParse(segments[1], out var id))
         {
             CurrentWorkspaceId = id;
         }
-        else if (workspaces.Count > 0)
+        else if (workspaces.Count > 0 && !CurrentWorkspaceId.HasValue)
         {
             CurrentWorkspaceId = workspaces[0].Id;
         }
     }
 
+    public void Dispose()
+    {
+        Nav.LocationChanged -= HandleLocationChanged;
+    }
+
     private void OnWorkspaceChanged(ChangeEventArgs e)
     {
         if (Guid.TryParse(e.Value?.ToString(), out var id))
+        {
+            CurrentWorkspaceId = id;
             Nav.NavigateTo($"/workspaces/{id}", forceLoad: false);
+        }
     }
 
     private string DashboardHref => CurrentWorkspaceId.HasValue ? $"/workspaces/{CurrentWorkspaceId}" : "/workspaces";
