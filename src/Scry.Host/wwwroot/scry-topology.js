@@ -1,6 +1,7 @@
 window.ScryTopology = (function () {
     let cy = null;
     let dotNetRef = null;
+    let hubConnection = null;
 
     const healthColor = {
         'Ok':      '#34d399',
@@ -12,11 +13,17 @@ window.ScryTopology = (function () {
         undefined: '#1a1d2e',
     };
 
-    const healthGlow = {
-        'Ok':   '0 0 12px rgba(52,211,153,0.55)',
-        'Warn': '0 0 10px rgba(251,191,36,0.45)',
-        'Crit': '0 0 14px rgba(248,113,113,0.60)',
-        'Error':'0 0 10px rgba(167,139,250,0.45)',
+    // Distinct shape per asset kind so nodes are identifiable without labels
+    const kindShape = {
+        Domain:        'ellipse',
+        Host:          'rectangle',
+        Service:       'round-rectangle',
+        Database:      'barrel',
+        CloudResource: 'diamond',
+        Certificate:   'pentagon',
+        Account:       'ellipse',
+        Network:       'hexagon',
+        Unknown:       'ellipse',
     };
 
     const kindIcon = {
@@ -35,6 +42,10 @@ window.ScryTopology = (function () {
         return healthColor[health] ?? healthColor[null];
     }
 
+    function nodeShape(kind) {
+        return kindShape[kind] ?? 'ellipse';
+    }
+
     function buildElements(graphData) {
         const nodes = (graphData.nodes || graphData.Nodes || []).map(n => ({
             data: { id: n.id, label: (kindIcon[n.kind] || '●') + ' ' + n.name, health: n.health, kind: n.kind, name: n.name }
@@ -50,6 +61,7 @@ window.ScryTopology = (function () {
             {
                 selector: 'node',
                 style: {
+                    'shape': ele => nodeShape(ele.data('kind')),
                     'background-color': ele => nodeColor(ele.data('health')),
                     'label': 'data(label)',
                     'color': '#94a3b8',
@@ -126,8 +138,8 @@ window.ScryTopology = (function () {
             elements,
             style: makeStyle(),
             layout: { name: 'cose', animate: true, randomize: false, padding: 40, nodeRepulsion: 6000, idealEdgeLength: 120 },
-            minZoom: 0.2,
-            maxZoom: 3,
+            minZoom: 0.1,
+            maxZoom: 4,
             wheelSensitivity: 0.3,
         });
 
@@ -170,8 +182,52 @@ window.ScryTopology = (function () {
             }
         },
 
+        fitView() {
+            if (!cy) { return; }
+            cy.fit(undefined, 40);
+        },
+
+        zoomIn() {
+            if (!cy) { return; }
+            cy.zoom({ level: cy.zoom() * 1.25, renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 } });
+        },
+
+        zoomOut() {
+            if (!cy) { return; }
+            cy.zoom({ level: cy.zoom() * 0.8, renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 } });
+        },
+
+        connectHub(workspaceId, ref) {
+            dotNetRef = ref;
+            if (hubConnection) { return; }
+
+            const conn = new signalR.HubConnectionBuilder()
+                .withUrl('/hubs/probes')
+                .withAutomaticReconnect()
+                .build();
+
+            conn.onclose(() => ref.invokeMethodAsync('OnHubStatusChanged', 'disconnected').catch(() => {}));
+            conn.onreconnecting(() => ref.invokeMethodAsync('OnHubStatusChanged', 'reconnecting').catch(() => {}));
+            conn.onreconnected(() => {
+                conn.invoke('JoinWorkspace', workspaceId).catch(() => {});
+                ref.invokeMethodAsync('OnHubStatusChanged', 'connected').catch(() => {});
+            });
+
+            conn.on('ProbeResult', ({ probeId, workspaceId: wsId, outcome }) => {
+                ref.invokeMethodAsync('OnProbeResultPushed', probeId, wsId, outcome).catch(() => {});
+            });
+
+            conn.start()
+                .then(() => conn.invoke('JoinWorkspace', workspaceId))
+                .then(() => ref.invokeMethodAsync('OnHubStatusChanged', 'connected').catch(() => {}))
+                .catch(() => ref.invokeMethodAsync('OnHubStatusChanged', 'error').catch(() => {}));
+
+            hubConnection = conn;
+        },
+
         destroy() {
             if (cy) { cy.destroy(); cy = null; }
+            if (hubConnection) { hubConnection.stop().catch(() => {}); hubConnection = null; }
             dotNetRef = null;
         },
     };
